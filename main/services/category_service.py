@@ -114,7 +114,7 @@ class CategoryService:
             return {'success': False, 'message': 'Category not found'}
     
     @staticmethod
-    def create_category(name, description, icon, sort_order, status='ACTIVE', 
+    def create_category(name, description, sort_order, status='ACTIVE', 
                        meta_title=None, meta_description=None, slug=None):
         try:
             if not slug:

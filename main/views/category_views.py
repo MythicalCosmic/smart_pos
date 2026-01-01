@@ -43,7 +43,7 @@ def create_category(request):
     if error:
         return error
     
-    required = ['name', 'description', 'icon', 'sort_order']
+    required = ['name', 'description', 'sort_order']
     missing = [field for field in required if not data.get(field)]
     
     if missing:
@@ -55,11 +55,8 @@ def create_category(request):
     result = CategoryService.create_category(
         name=data['name'],
         description=data['description'],
-        icon=data['icon'],
         sort_order=data['sort_order'],
         status=data.get('status', 'ACTIVE'),
-        meta_title=data.get('meta_title'),
-        meta_description=data.get('meta_description'),
         slug=data.get('slug')
     )
     

@@ -48,6 +48,12 @@ class Session(models.Model):
 
 class Category(models.Model):
     name = models.CharField(max_length=50)
+    sort_order = models.IntegerField(default=0)
+    status = models.CharField(
+        max_length=10,
+        choices=[('ACTIVE', 'Active'), ('INACTIVE', 'Inactive')],
+        default='ACTIVE'
+    )
     slug = models.SlugField(unique=True)
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)

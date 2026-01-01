@@ -26,7 +26,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-6f=xi1)9e)2l__yw&2-!o%t#gh
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -58,7 +58,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    # 'main.middleware.JSONOnlyMiddleware',
+    'main.middleware.JSONOnlyMiddleware',
 ]
 
 ROOT_URLCONF = 'smart_jowi.urls'
@@ -95,7 +95,7 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [(os.getenv('REDIS_HOST', '127.0.0.1'), int(os.getenv('REDIS_PORT', '6379')))],
+            "hosts": [(os.getenv('REDIS_HOST', '172.18.74.18'), int(os.getenv('REDIS_PORT', '6379')))],
         },
     },
 }
