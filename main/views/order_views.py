@@ -199,7 +199,7 @@ def pay_order(request, order_id):
     user = request.user
     
     # Only cashiers can mark orders as paid
-    if user.role != 'CASHIER':
+    if user.role != 'ADMIN':
         return APIResponse.error(
             message='Only cashiers can process payments',
             status_code=403

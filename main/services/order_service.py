@@ -7,6 +7,7 @@ from main.models import Order, OrderItem, Product, User
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models.functions import Coalesce
+from main.services.inkassa_service import InkassaService
 
 
 class OrderService:
@@ -17,7 +18,7 @@ class OrderService:
         last_order = Order.objects.aggregate(max_id=Max('display_id'))
         max_id = last_order['max_id']
         
-        if max_id is None or max_id >= 99:
+        if max_id is None or max_id >= 100:
             return 1
         return max_id + 1
     
@@ -275,6 +276,9 @@ class OrderService:
             if status not in ['OPEN', 'PAID', 'READY', 'CANCELED']:
                 return {'success': False, 'message': 'Invalid status'}
             
+            # Track if we're marking as PAID
+            marking_as_paid = (status == 'PAID' and order.status != 'PAID')
+            
             if status == 'PAID' and cashier_id:
                 if not User.objects.filter(id=cashier_id).exists():
                     return {'success': False, 'message': 'Invalid cashier'}
@@ -286,6 +290,10 @@ class OrderService:
             
             order.status = status
             order.save()
+            
+            # Add money to cash register when order is paid
+            if marking_as_paid:
+                InkassaService.add_to_register(order.total_amount)
             
             return {'success': True, 'message': f'Order status updated to {status}'}
         except Order.DoesNotExist:

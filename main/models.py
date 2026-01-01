@@ -129,3 +129,53 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.product.name} x {self.quantity}"
+
+
+class CashRegister(models.Model):
+    """Tracks current cash balance in the register"""
+    current_balance = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+    last_updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        # Ensure only one cash register record exists
+        db_table = 'cash_register'
+    
+    def __str__(self):
+        return f"Cash Register: {self.current_balance}"
+
+
+class Inkassa(models.Model):
+    """Records of cash withdrawals/counts from register"""
+    cashier = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="inkassas"
+    )
+    
+    # Amount removed from register
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    
+    # Balance before inkassa
+    balance_before = models.DecimalField(max_digits=12, decimal_places=2)
+    
+    # Balance after inkassa (should be 0 or small amount left)
+    balance_after = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    
+    # Period covered by this inkassa
+    period_start = models.DateTimeField(null=True, blank=True)
+    period_end = models.DateTimeField(auto_now_add=True)
+    
+    # Statistics snapshot at time of inkassa
+    total_orders = models.IntegerField(default=0)
+    total_revenue = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"Inkassa #{self.id} - {self.amount} on {self.created_at.strftime('%Y-%m-%d %H:%M')}"

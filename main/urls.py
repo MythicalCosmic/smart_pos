@@ -1,5 +1,5 @@
 from django.urls import path
-from main.views import auth_views, category_views, product_views, user_views, order_views
+from main.views import auth_views, category_views, product_views, user_views, order_views, inkassa_views
 
 
 app_name = 'main'
@@ -49,6 +49,12 @@ urlpatterns = [
     path('orders/<int:order_id>/ready', order_views.mark_ready, name='mark_order_ready'),
     path('orders/<int:order_id>/cancel', order_views.cancel_order, name='cancel_order'),
     path('orders/stats', order_views.get_stats, name='order_stats'),
+
+    path('inkassa/balance', inkassa_views.get_cash_balance, name='cash_balance'),
+    path('inkassa/stats', inkassa_views.get_current_stats, name='current_period_stats'),
+    path('inkassa/perform', inkassa_views.perform_inkassa, name='perform_inkassa'),
+    path('inkassa/history', inkassa_views.get_inkassa_history, name='inkassa_history'),
+    path('inkassa/<int:inkassa_id>', inkassa_views.get_inkassa, name='get_inkassa'),
     
     path('display/client', order_views.client_display, name='client_display'),
     path('display/chef', order_views.chef_display, name='chef_display'),
