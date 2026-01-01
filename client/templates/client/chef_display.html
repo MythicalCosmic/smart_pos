@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Food - Oshxona</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0F1115;
+            color: #FFFFFF;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1A1D23;
+            border-bottom: 3px solid #FF7A00;
+            position: relative;
+        }
+
+        .logo {
+            font-size: 2rem;
+            font-weight: 900;
+            color: #FF7A00;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        .logo-placeholder {
+            width: 60px;
+            height: 60px;
+            margin-right: 15px;
+            background: #FF7A00;
+            border-radius: 8px;
+            opacity: 0.15;
+        }
+
+        .time {
+            position: absolute;
+            right: 40px;
+            font-size: 1.5rem;
+            color: #B0B0B0;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            position: absolute;
+            left: 40px;
+            font-size: 1.2rem;
+            color: #B0B0B0;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .container {
+            height: calc(100vh - 80px);
+            padding: 30px;
+            position: relative;
+        }
+
+        .panel-bg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 400px;
+            height: 400px;
+            background: #FF7A00;
+            border-radius: 50%;
+            opacity: 0.03;
+            pointer-events: none;
+        }
+
+        .panel-title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 30px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #FF7A00;
+        }
+
+        .orders {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            overflow-y: auto;
+            max-height: calc(100vh - 200px);
+            padding: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .order-card {
+            background: #1A1D23;
+            border-radius: 16px;
+            border: 3px solid #FF7A00;
+            overflow: hidden;
+        }
+
+        .order-header {
+            background: #FF7A00;
+            color: #0F1115;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .order-number {
+            font-size: 2.5rem;
+            font-weight: 900;
+        }
+
+        .order-type {
+            font-size: 0.9rem;
+            font-weight: 700;
+            background: rgba(0,0,0,0.2);
+            padding: 5px 12px;
+            border-radius: 20px;
+        }
+
+        .order-items {
+            padding: 15px 20px;
+        }
+
+        .item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #2a2d33;
+        }
+
+        .item:last-child {
+            border-bottom: none;
+        }
+
+        .item-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #FFFFFF;
+        }
+
+        .item-qty {
+            font-size: 1.3rem;
+            font-weight: 900;
+            color: #FF7A00;
+            background: rgba(255, 122, 0, 0.1);
+            padding: 5px 15px;
+            border-radius: 8px;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .btn-ready {
+            width: 100%;
+            padding: 18px;
+            background: #4CAF50;
+            color: #FFFFFF;
+            border: none;
+            font-size: 1.2rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-ready:hover {
+            background: #45a049;
+        }
+
+        .btn-ready:active {
+            background: #3d8b40;
+        }
+
+        .btn-ready:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .empty {
+            text-align: center;
+            color: #B0B0B0;
+            font-size: 1.5rem;
+            opacity: 0.5;
+            padding: 100px;
+            grid-column: 1 / -1;
+        }
+
+        .orders::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .orders::-webkit-scrollbar-track {
+            background: #1A1D23;
+            border-radius: 4px;
+        }
+
+        .orders::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        @media (min-width: 1920px) {
+            .orders {
+                grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            }
+            .order-number {
+                font-size: 3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="subtitle">Oshxona</div>
+        <div class="logo-placeholder"></div>
+        <div class="logo">Smart Food</div>
+        <div class="time" id="time"></div>
+    </header>
+
+    <div class="container">
+        <div class="panel-bg"></div>
+        <div class="panel-title">Buyurtmalar</div>
+        <div class="orders" id="orders"></div>
+    </div>
+
+    <script>
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('time').textContent = 
+                now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        async function markReady(orderId, btn) {
+            btn.disabled = true;
+            btn.textContent = 'Kutib turing...';
+            
+            try {
+                const res = await fetch(`{% url "client:chef_mark_ready" order_id=0 %}`.replace('0', orderId), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    }
+                });
+                
+                if (res.ok) {
+                    const card = btn.closest('.order-card');
+                    card.style.transition = 'all 0.3s ease';
+                    card.style.opacity = '0';
+                    card.style.transform = 'scale(0.8)';
+                    setTimeout(() => {
+                        card.remove();
+                        if (document.querySelectorAll('.order-card').length === 0) {
+                            document.getElementById('orders').innerHTML = '<div class="empty">Buyurtmalar yo\'q</div>';
+                        }
+                    }, 300);
+                } else {
+                    btn.disabled = false;
+                    btn.textContent = 'Tayyor ❌';
+                    setTimeout(() => { btn.textContent = 'Tayyor'; }, 2000);
+                }
+            } catch (e) {
+                console.error(e);
+                btn.disabled = false;
+                btn.textContent = 'Tayyor ❌';
+                setTimeout(() => { btn.textContent = 'Tayyor'; }, 2000);
+            }
+        }
+
+        function createOrderCard(order) {
+            const items = order.items.map(item => `
+                <div class="item">
+                    <span class="item-name">${item.product_name}</span>
+                    <span class="item-qty">x${item.quantity}</span>
+                </div>
+            `).join('');
+
+            return `
+                <div class="order-card" data-id="${order.id}">
+                    <div class="order-header">
+                        <span class="order-number">${String(order.display_id).padStart(2, '0')}</span>
+                        <span class="order-type">${order.order_type || 'HALL'}</span>
+                    </div>
+                    <div class="order-items">
+                        ${items}
+                    </div>
+                    <button class="btn-ready" onclick="markReady(${order.id}, this)">Tayyor</button>
+                </div>
+            `;
+        }
+
+        async function fetchOrders() {
+            try {
+                const res = await fetch('{% url "client:chef_orders_data" %}');
+                const data = await res.json();
+
+                document.getElementById('orders').innerHTML = data.orders.length
+                    ? data.orders.map(o => createOrderCard(o)).join('')
+                    : '<div class="empty">Buyurtmalar yo\'q</div>';
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        fetchOrders();
+        setInterval(fetchOrders, 5000);
+    </script>
+</body>
+</html>
