@@ -1,0 +1,17 @@
+.env
+.env.local
+.env.production
+.env.staging
+.env.test
+__pycache__/
+*.pyc
+db.sqlite3
+/staticfiles/
+media/
+.vscode/
+.idea/
+.DS_Store
+coverage
+coverage.*
+htmlcov/
+.pytest_cache/
