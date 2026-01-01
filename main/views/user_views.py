@@ -1,27 +1,25 @@
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from ..services.category_service import CategoryService
+from ..services.user_service import UserService
 from main.helpers.response import APIResponse
 from main.helpers.request import parse_json_body
-from main.helpers.require_login import user_required
-from rest_framework.decorators import api_view
-
 
 
 @csrf_exempt
-@api_view(["GET"])
-@user_required
-def list_categories(request):
+@require_http_methods(["GET"])
+def list_users(request):
     page = int(request.GET.get('page', 1))
     per_page = int(request.GET.get('per_page', 20))
     search = request.GET.get('search')
+    role = request.GET.get('role')
     status = request.GET.get('status')
-    order_by = request.GET.get('order_by', 'sort_order')
+    order_by = request.GET.get('order_by', '-id')
     
-    result = CategoryService.get_all_categories(
+    result = UserService.get_all_users(
         page=page,
         per_page=per_page,
         search=search,
+        role=role,
         status=status,
         order_by=order_by
     )
@@ -30,26 +28,25 @@ def list_categories(request):
 
 
 @csrf_exempt
-@api_view(["GET"])
-@user_required
-def get_category(request, category_id):
-    result = CategoryService.get_category_by_id(category_id)
+@require_http_methods(["GET"])
+def get_user(request, user_id):
+    result = UserService.get_user_by_id(user_id)
+    print(result)
     
     if result['success']:
-        return APIResponse.success(data=result['category'])
+        return APIResponse.success(data=result['user'])
     
     return APIResponse.not_found(message=result['message'])
 
 
 @csrf_exempt
-@api_view(["POST"])
-@user_required
-def create_category(request):
+@require_http_methods(["POST"])
+def create_user(request):
     data, error = parse_json_body(request)
     if error:
         return error
     
-    required = ['name', 'description', 'sort_order']
+    required = ['first_name', 'last_name', 'email', 'password']
     missing = [field for field in required if not data.get(field)]
     
     if missing:
@@ -58,17 +55,18 @@ def create_category(request):
             message=f'Missing required fields: {", ".join(missing)}'
         )
     
-    result = CategoryService.create_category(
-        name=data['name'],
-        description=data['description'],
-        sort_order=data['sort_order'],
+    result = UserService.create_user(
+        first_name=data['first_name'],
+        last_name=data['last_name'],
+        email=data['email'],
+        password=data['password'],
+        role=data.get('role', 'USER'),
         status=data.get('status', 'ACTIVE'),
-        slug=data.get('slug')
     )
     
     if result['success']:
         return APIResponse.created(
-            data={'category_id': result['category'].id},
+            data={'user_id': result['user'].id},
             message=result['message']
         )
     
@@ -76,14 +74,13 @@ def create_category(request):
 
 
 @csrf_exempt
-@api_view(["PUT", "PATCH"])
-@user_required
-def update_category(request, category_id):
+@require_http_methods(["PUT", "PATCH"])
+def update_user(request, user_id):
     data, error = parse_json_body(request)
     if error:
         return error
     
-    result = CategoryService.update_category(category_id, **data)
+    result = UserService.update_user(user_id, **data)
     
     if result['success']:
         return APIResponse.success(message=result['message'])
@@ -92,10 +89,9 @@ def update_category(request, category_id):
 
 
 @csrf_exempt
-@api_view(["DELETE"])
-@user_required
-def delete_category(request, category_id):
-    result = CategoryService.delete_category(category_id)
+@require_http_methods(["DELETE"])
+def delete_user(request, user_id):
+    result = UserService.delete_user(user_id)
     
     if result['success']:
         return APIResponse.success(message=result['message'])
@@ -104,9 +100,8 @@ def delete_category(request, category_id):
 
 
 @csrf_exempt
-@api_view(["PATCH"])
-@user_required
-def update_category_status(request, category_id):
+@require_http_methods(["PATCH"])
+def update_user_status(request, user_id):
     data, error = parse_json_body(request)
     if error:
         return error
@@ -118,7 +113,7 @@ def update_category_status(request, category_id):
             message='Missing status field'
         )
     
-    result = CategoryService.update_category_status(category_id, status)
+    result = UserService.update_user_status(user_id, status)
     
     if result['success']:
         return APIResponse.success(message=result['message'])
@@ -127,21 +122,20 @@ def update_category_status(request, category_id):
 
 
 @csrf_exempt
-@api_view(["POST"])
-@user_required
-def reorder_categories(request):
+@require_http_methods(["PATCH"])
+def update_user_role(request, user_id):
     data, error = parse_json_body(request)
     if error:
         return error
     
-    orders = data.get('orders')
-    if not orders:
+    role = data.get('role')
+    if not role:
         return APIResponse.validation_error(
-            errors={'orders': 'orders array is required'},
-            message='Missing orders field'
+            errors={'role': 'role is required'},
+            message='Missing role field'
         )
     
-    result = CategoryService.reorder_categories(orders)
+    result = UserService.update_user_role(user_id, role)
     
     if result['success']:
         return APIResponse.success(message=result['message'])
@@ -150,8 +144,7 @@ def reorder_categories(request):
 
 
 @csrf_exempt
-@api_view(["GET"])
-@user_required
+@require_http_methods(["GET"])
 def get_stats(request):
-    result = CategoryService.get_category_stats()
+    result = UserService.get_user_stats()
     return APIResponse.success(data=result['stats'])

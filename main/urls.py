@@ -1,5 +1,5 @@
 from django.urls import path
-from main.views import auth_views, category_views
+from main.views import auth_views, category_views, user_views
 
 
 app_name = 'main'
@@ -20,4 +20,14 @@ urlpatterns = [
     path('categories/<int:category_id>/status', category_views.update_category_status, name='update_category_status'),
     path('categories/reorder', category_views.reorder_categories, name='reorder_categories'),
     path('categories/stats', category_views.get_stats, name='get_category_stats'),
+
+
+    path('users', user_views.list_users, name='list_users'),
+    path('users/<int:user_id>', user_views.get_user, name='get_user'),
+    path('users/create', user_views.create_user, name='create_user'),
+    path('users/<int:user_id>/update', user_views.update_user, name='update_user'),
+    path('users/<int:user_id>/delete', user_views.delete_user, name='delete_user'),
+    path('users/<int:user_id>/status', user_views.update_user_status, name='update_user_status'),
+    path('users/<int:user_id>/role', user_views.update_user_role, name='update_user_role'),
+    path('stats', user_views.get_stats, name='get_stats'),
 ]
