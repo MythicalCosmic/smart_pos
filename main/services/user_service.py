@@ -6,15 +6,8 @@ from django.core.cache import cache
 
 
 class UserService:
-    CACHE_TILL = 300
-
     @staticmethod
     def get_all_users(page=1, per_page=20, search=None, role=None, status=None, order_by='-id'):
-        cache_key = f'users:all:{page}:{per_page}:{search}:{status}:{order_by}'
-        cached_data = cache.get(cache_key)
-
-        if cached_data:
-            return cached_data
         
         queryset = User.objects.only(
             'id', 'first_name', 'last_name', 'email', 'role', 'status', 
@@ -51,16 +44,10 @@ class UserService:
                 'has_previous': page_obj.has_previous()
             }
         }
-        cache.set(cache_key, result, UserService.CACHE_TILL)
         return result
     
     @staticmethod
     def get_user_by_id(user_id):
-        cache_key = f"user:id:{user_id}"
-        cache_data = cache.get(cache_key)
-
-        if cache_data:
-            return cache_data
 
         try:
             user = User.objects.only(
@@ -83,7 +70,6 @@ class UserService:
                 }
             }
 
-            cache.set(cache_key, result, UserService.CACHE_TILL)
             return result
 
         except User.DoesNotExist:
@@ -99,7 +85,6 @@ class UserService:
         try:
             if User.objects.filter(email=email).exists():
                 return {'success': False, 'message': 'Email already exists'}
-            UserService._clear_cache()
             user = User.objects.create(
                 first_name=first_name,
                 last_name=last_name,
@@ -117,7 +102,6 @@ class UserService:
     def update_user(user_id, **kwargs):
         try:
             user = User.objects.get(id=user_id)
-            UserService._clear_cache()
             
             if 'email' in kwargs and kwargs['email'] != user.email:
                 if User.objects.filter(email=kwargs['email']).exists():
@@ -142,7 +126,6 @@ class UserService:
     def delete_user(user_id):
         try:
             user = User.objects.get(id=user_id)
-            UserService._clear_cache()
             user.delete()
             return {'success': True, 'message': 'User deleted successfully'}
         except User.DoesNotExist:
@@ -154,7 +137,6 @@ class UserService:
     def update_user_status(user_id, status):
         try:
             User.objects.filter(id=user_id).update(status=status)
-            UserService._clear_cache()
             return {'success': True, 'message': f'User status updated to {status}'}
         except Exception as e:
             return {'success': False, 'message': f'Failed to update status: {str(e)}'}
@@ -163,7 +145,6 @@ class UserService:
     def update_user_role(user_id, role):
         try:
             User.objects.filter(id=user_id).update(role=role)
-            UserService._clear_cache()
             return {'success': True, 'message': f'User role updated to {role}'}
         except Exception as e:
             return {'success': False, 'message': f'Failed to update role: {str(e)}'}
@@ -172,7 +153,6 @@ class UserService:
     def toggle_api_access(user_id):
         try:
             user = User.objects.only('id', 'api_enabled').get(id=user_id)
-            UserService._clear_cache()
             new_status = not user.api_enabled
             User.objects.filter(id=user_id).update(api_enabled=new_status)
             return {'success': True, 'api_enabled': new_status, 'message': f'API access {"enabled" if new_status else "disabled"}'}
@@ -181,11 +161,6 @@ class UserService:
     
     @staticmethod
     def get_user_stats():
-        cache_key = 'users:stats'
-        cache_data = cache.get(cache_key)
-
-        if cache_data:
-            return cache_data
         
         total_users = User.objects.count()
         active_users = User.objects.filter(status='ACTIVE').count()
@@ -203,13 +178,4 @@ class UserService:
                 'reseller_users': reseller_users
             }
         }
-        cache.set(cache_key, result, UserService.CACHE_TILL)
         return result
-    
-    @staticmethod
-    def _clear_cache():
-        try:
-            cache.delete_pattern('users:*')
-            cache.delete_pattern('users:*')
-        except AttributeError:
-            cache.clear()

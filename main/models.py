@@ -1,7 +1,5 @@
 from django.db import models
 
-# Create your models here.
-
 class User(models.Model):
     class RoleChoices(models.TextChoices):
         USER = "USER", "User"
@@ -34,7 +32,6 @@ class User(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
-    
 
 
 class Session(models.Model):
@@ -43,7 +40,6 @@ class Session(models.Model):
     user_agent = models.CharField(max_length=30, null=True, blank=True, default='Chrome')
     payload = models.CharField(max_length=20, null=True, blank=True)
     last_activity = models.DateTimeField(auto_now_add=True)
-
 
 
 class Category(models.Model):
@@ -62,6 +58,7 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
+
 class Product(models.Model):
     category = models.ForeignKey(
         Category,
@@ -73,14 +70,17 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
     def __str__(self):
         return self.name
-    
+
+
 class Order(models.Model):
     class Status(models.TextChoices):
-        OPEN = "OPEN", "Open"
-        PAID = "PAID", "Paid"
-        CANCELED = "CANCELED", "Canceled"
+        OPEN = "OPEN", "Open"              # Cashier is creating the order
+        PAID = "PAID", "Paid"              # Customer paid, waiting for chef
+        READY = "READY", "Ready"           # Chef finished preparing
+        CANCELED = "CANCELED", "Canceled"  # Order was canceled
 
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     cashier = models.ForeignKey(
@@ -91,6 +91,9 @@ class Order(models.Model):
         related_name="handled_orders"
     )
 
+    # Display ID that cycles from 1-100
+    display_id = models.IntegerField(default=1)
+    
     status = models.CharField(
         max_length=10,
         choices=Status.choices,
@@ -100,6 +103,12 @@ class Order(models.Model):
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    # Track when order was marked as ready
+    ready_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Order #{self.display_id} - {self.status}"
 
 
 class OrderItem(models.Model):

@@ -6,15 +6,9 @@ from main.models import Category
 
 
 class CategoryService:
-    CACHE_TTL = 300  
     
     @staticmethod
     def get_all_categories(page=1, per_page=20, search=None, status=None, order_by='sort_order'):
-        cache_key = f'categories:all:{page}:{per_page}:{search}:{status}:{order_by}'
-        cached_data = cache.get(cache_key)
-        
-        if cached_data:
-            return cached_data
         
         queryset = Category.objects.all()
         
@@ -44,33 +38,21 @@ class CategoryService:
                 'has_previous': page_obj.has_previous()
             }
         }
-        
-        cache.set(cache_key, result, CategoryService.CACHE_TTL)
         return result
     
     @staticmethod
     def get_active_categories():
-        cache_key = 'categories:active'
-        cached_data = cache.get(cache_key)
         
-        if cached_data:
-            return cached_data
         
         categories = Category.objects.filter(status='ACTIVE').order_by('sort_order').values(
             'id', 'name', 'slug', 'description', 'sort_order'
         )
         
         result = {'success': True, 'categories': list(categories)}
-        cache.set(cache_key, result, CategoryService.CACHE_TTL)
         return result
     
     @staticmethod
     def get_category_by_id(category_id):
-        cache_key = f'category:id:{category_id}'
-        cached_data = cache.get(cache_key)
-        
-        if cached_data:
-            return cached_data
         
         try:
             category = Category.objects.get(id=category_id)
@@ -84,18 +66,12 @@ class CategoryService:
                     'status': category.status
                 }
             }
-            cache.set(cache_key, result, CategoryService.CACHE_TTL)
             return result
         except Category.DoesNotExist:
             return {'success': False, 'message': 'Category not found'}
     
     @staticmethod
     def get_category_by_slug(slug):
-        cache_key = f'category:slug:{slug}'
-        cached_data = cache.get(cache_key)
-        
-        if cached_data:
-            return cached_data
         
         try:
             category = Category.objects.get(slug=slug, status='ACTIVE')
@@ -108,7 +84,6 @@ class CategoryService:
                     'description': category.description,
                 }
             }
-            cache.set(cache_key, result, CategoryService.CACHE_TTL)
             return result
         except Category.DoesNotExist:
             return {'success': False, 'message': 'Category not found'}
@@ -132,7 +107,6 @@ class CategoryService:
                 description=description,
             )
             
-            CategoryService._clear_cache()
             
             return {'success': True, 'category': category, 'message': 'Category created successfully'}
         except Exception as e:
@@ -158,9 +132,7 @@ class CategoryService:
                     setattr(category, key, value)
             
             category.save()
-            
-            CategoryService._clear_cache()
-            
+                    
             return {'success': True, 'category': category, 'message': 'Category updated successfully'}
         except Category.DoesNotExist:
             return {'success': False, 'message': 'Category not found'}
@@ -172,9 +144,7 @@ class CategoryService:
         try:
             category = Category.objects.get(id=category_id)
             category.delete()
-            
-            CategoryService._clear_cache()
-            
+                        
             return {'success': True, 'message': 'Category deleted successfully'}
         except Category.DoesNotExist:
             return {'success': False, 'message': 'Category not found'}
@@ -185,7 +155,6 @@ class CategoryService:
     def update_category_status(category_id, status):
         try:
             Category.objects.filter(id=category_id).update(status=status)
-            CategoryService._clear_cache()
             return {'success': True, 'message': f'Category status updated to {status}'}
         except Exception as e:
             return {'success': False, 'message': f'Failed to update status: {str(e)}'}
@@ -196,7 +165,6 @@ class CategoryService:
             for item in category_orders:
                 Category.objects.filter(id=item['id']).update(sort_order=item['sort_order'])
             
-            CategoryService._clear_cache()
             
             return {'success': True, 'message': 'Categories reordered successfully'}
         except Exception as e:
@@ -204,11 +172,6 @@ class CategoryService:
     
     @staticmethod
     def get_category_stats():
-        cache_key = 'categories:stats'
-        cached_data = cache.get(cache_key)
-        
-        if cached_data:
-            return cached_data
         
         total = Category.objects.count()
         active = Category.objects.filter(status='ACTIVE').count()
@@ -222,14 +185,4 @@ class CategoryService:
                 'inactive_categories': inactive
             }
         }
-        
-        cache.set(cache_key, result, CategoryService.CACHE_TTL)
         return result
-    
-    @staticmethod
-    def _clear_cache():
-        try:
-            cache.delete_pattern('categories:*')
-            cache.delete_pattern('category:*')
-        except AttributeError:
-            cache.clear()

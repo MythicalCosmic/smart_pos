@@ -31,7 +31,6 @@ def list_users(request):
 @require_http_methods(["GET"])
 def get_user(request, user_id):
     result = UserService.get_user_by_id(user_id)
-    print(result)
     
     if result['success']:
         return APIResponse.success(data=result['user'])
