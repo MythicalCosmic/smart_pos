@@ -7,7 +7,7 @@ from main.models import Order, OrderItem, Product, User
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models.functions import Coalesce
-from main.services.inkassa_service import InkassaService
+from .inkassa_service import InkassaService
 
 
 class OrderService:
@@ -46,6 +46,9 @@ class OrderService:
             orders.append({
                 'id': order.id,
                 'display_id': order.display_id,
+                'order_type': order.order_type,
+                'phone_number': order.phone_number,
+                'description': order.description,
                 'user': {
                     'id': order.user.id,
                     'name': f"{order.user.first_name} {order.user.last_name}",
@@ -99,6 +102,9 @@ class OrderService:
                 'order': {
                     'id': order.id,
                     'display_id': order.display_id,
+                    'order_type': order.order_type,
+                    'phone_number': order.phone_number,
+                    'description': order.description,
                     'user': {
                         'id': order.user.id,
                         'name': f"{order.user.first_name} {order.user.last_name}",
@@ -123,7 +129,7 @@ class OrderService:
     
     @staticmethod
     @transaction.atomic
-    def create_order(user_id, items, cashier_id=None):
+    def create_order(user_id, items, order_type='HALL', phone_number=None, description=None, cashier_id=None):
         try:
             if not User.objects.filter(id=user_id).exists():
                 return {'success': False, 'message': 'User not found'}
@@ -134,6 +140,17 @@ class OrderService:
             if not items or len(items) == 0:
                 return {'success': False, 'message': 'Order must have at least one item'}
             
+            # Validate order type
+            if order_type not in ['HALL', 'DELIVERY', 'PICKUP']:
+                return {'success': False, 'message': 'Invalid order type. Must be HALL, DELIVERY, or PICKUP'}
+            
+            # Validate DELIVERY requirements
+            if order_type == 'DELIVERY':
+                if not phone_number:
+                    return {'success': False, 'message': 'Phone number is required for delivery orders'}
+                if not description:
+                    return {'success': False, 'message': 'Delivery address is required for delivery orders'}
+            
             # Get next display ID
             display_id = OrderService._get_next_display_id()
             
@@ -141,6 +158,9 @@ class OrderService:
                 user_id=user_id,
                 cashier_id=cashier_id,
                 display_id=display_id,
+                order_type=order_type,
+                phone_number=phone_number,
+                description=description,
                 status='OPEN',
                 total_amount=0
             )
@@ -270,36 +290,55 @@ class OrderService:
     
     @staticmethod
     def update_order_status(order_id, status, cashier_id=None):
+        """Legacy method - use mark_as_paid or mark_as_ready instead"""
         try:
             order = Order.objects.get(id=order_id)
             
-            if status not in ['OPEN', 'PAID', 'READY', 'CANCELED']:
+            if status not in ['OPEN', 'PREPARING', 'READY', 'COMPLETED', 'CANCELED']:
                 return {'success': False, 'message': 'Invalid status'}
             
-            # Track if we're marking as PAID
-            marking_as_paid = (status == 'PAID' and order.status != 'PAID')
+            if status == 'CANCELED':
+                order.status = 'CANCELED'
+                order.save()
+                return {'success': True, 'message': 'Order canceled'}
             
-            if status == 'PAID' and cashier_id:
-                if not User.objects.filter(id=cashier_id).exists():
-                    return {'success': False, 'message': 'Invalid cashier'}
-                order.cashier_id = cashier_id
+            # For other statuses, use the proper methods
+            return {'success': False, 'message': 'Use mark_as_paid or mark_as_ready methods instead'}
             
-            # When order is marked as READY, set ready_at timestamp
-            if status == 'READY' and order.status != 'READY':
-                order.ready_at = timezone.now()
-            
-            order.status = status
-            order.save()
-            
-            # Add money to cash register when order is paid
-            if marking_as_paid:
-                InkassaService.add_to_register(order.total_amount)
-            
-            return {'success': True, 'message': f'Order status updated to {status}'}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
         except Exception as e:
             return {'success': False, 'message': f'Failed to update status: {str(e)}'}
+    
+    @staticmethod
+    def mark_as_paid(order_id, cashier_id):
+        """Mark order as paid"""
+        try:
+            order = Order.objects.get(id=order_id)
+            
+            if order.status == 'CANCELED':
+                return {'success': False, 'message': 'Cannot mark canceled order as paid'}
+            
+            if order.is_paid:
+                return {'success': False, 'message': 'Order is already paid'}
+            
+            # Validate cashier
+            if not User.objects.filter(id=cashier_id).exists():
+                return {'success': False, 'message': 'Invalid cashier'}
+            
+            order.cashier_id = cashier_id
+            order.is_paid = True
+            order.paid_at = timezone.now()
+            order.update_status()  # Auto-update status
+            
+            # Add money to cash register
+            InkassaService.add_to_register(order.total_amount)
+            
+            return {'success': True, 'message': 'Order marked as paid', 'status': order.status}
+        except Order.DoesNotExist:
+            return {'success': False, 'message': 'Order not found'}
+        except Exception as e:
+            return {'success': False, 'message': f'Failed to mark as paid: {str(e)}'}
     
     @staticmethod
     def mark_order_ready(order_id):
@@ -307,17 +346,17 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
             
-            if order.status == 'READY':
-                return {'success': False, 'message': 'Order is already marked as ready'}
-            
             if order.status == 'CANCELED':
                 return {'success': False, 'message': 'Cannot mark canceled order as ready'}
             
-            order.status = 'READY'
-            order.ready_at = timezone.now()
-            order.save()
+            if order.is_ready:
+                return {'success': False, 'message': 'Order is already marked as ready'}
             
-            return {'success': True, 'message': 'Order marked as ready'}
+            order.is_ready = True
+            order.ready_at = timezone.now()
+            order.update_status()  # Auto-update status
+            
+            return {'success': True, 'message': 'Order marked as ready', 'status': order.status}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
         except Exception as e:
@@ -382,7 +421,9 @@ class OrderService:
         """
         
         # Only show PAID orders - these need to be prepared
-        orders = Order.objects.select_related('user').prefetch_related('items__product').order_by('created_at')
+        orders = Order.objects.filter(
+            status='PAID'
+        ).select_related('user').prefetch_related('items__product').order_by('created_at')
         
         orders_list = []
         for order in orders:

@@ -1,0 +1,291 @@
+{% extends 'admin/base.html' %}
+{% load i18n unfold %}
+
+{% block content %}
+    {% component "unfold/components/container.html" %}
+        {# Period Filter #}
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+            {% component "unfold/components/navigation.html" with class="ml-auto" items=filters %}
+            {% endcomponent %}
+        </div>
+
+        {# KPI Cards #}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {% for kpi in kpis %}
+                {% component "unfold/components/card.html" %}
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            {% component "unfold/components/text.html" with class="text-gray-500 dark:text-gray-400 text-sm mb-1" %}
+                                {{ kpi.title }}
+                            {% endcomponent %}
+                            
+                            {% component "unfold/components/title.html" with class="text-2xl font-bold text-gray-900 dark:text-white mb-2" %}
+                                {{ kpi.metric }}
+                            {% endcomponent %}
+                            
+                            {% component "unfold/components/text.html" with class="text-gray-400 dark:text-gray-500 text-xs" %}
+                                {{ kpi.footer }}
+                            {% endcomponent %}
+                        </div>
+                        <div class="ml-4">
+                            <span class="material-symbols-outlined text-3xl text-primary-600 dark:text-primary-400">
+                                {{ kpi.icon }}
+                            </span>
+                        </div>
+                    </div>
+                {% endcomponent %}
+            {% endfor %}
+        </div>
+
+        {# Order Status Cards #}
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {% for card in order_status_cards %}
+                {% component "unfold/components/card.html" %}
+                    <div class="text-center p-4">
+                        {% component "unfold/components/text.html" with class="text-gray-500 dark:text-gray-400 text-sm mb-2" %}
+                            {{ card.title }}
+                        {% endcomponent %}
+                        
+                        {% component "unfold/components/title.html" with class="text-4xl font-bold" %}
+                            <span class="{% if card.color == 'blue' %}text-blue-600{% elif card.color == 'green' %}text-green-600{% elif card.color == 'yellow' %}text-yellow-600{% endif %}">
+                                {{ card.count }}
+                            </span>
+                        {% endcomponent %}
+                    </div>
+                {% endcomponent %}
+            {% endfor %}
+        </div>
+
+        {# Charts Row #}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {# Revenue Chart #}
+            {% component "unfold/components/card.html" %}
+                {% component "unfold/components/title.html" with class="mb-4" %}
+                    Revenue Trend
+                {% endcomponent %}
+                <div style="position: relative; height: 250px;">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            {% endcomponent %}
+
+            {# Orders Chart #}
+            {% component "unfold/components/card.html" %}
+                {% component "unfold/components/title.html" with class="mb-4" %}
+                    Orders Trend
+                {% endcomponent %}
+                <div style="position: relative; height: 250px;">
+                    <canvas id="ordersChart"></canvas>
+                </div>
+            {% endcomponent %}
+        </div>
+
+        {# Bottom Row: Top Products, Categories, Cashiers #}
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {# Top Products #}
+            {% component "unfold/components/card.html" %}
+                {% component "unfold/components/title.html" with class="mb-4" %}
+                    Top Products
+                {% endcomponent %}
+                <div class="space-y-3">
+                    {% for product in top_products %}
+                        <div class="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
+                            <div class="flex-1">
+                                {% component "unfold/components/text.html" with class="font-medium text-gray-900 dark:text-white" %}
+                                    {{ product.product__name }}
+                                {% endcomponent %}
+                                {% component "unfold/components/text.html" with class="text-sm text-gray-500 dark:text-gray-400" %}
+                                    {{ product.total_quantity }} sold
+                                {% endcomponent %}
+                            </div>
+                            {% component "unfold/components/text.html" with class="font-semibold text-green-600 dark:text-green-400" %}
+                                {{ product.total_revenue|floatformat:0 }} UZS
+                            {% endcomponent %}
+                        </div>
+                    {% empty %}
+                        {% component "unfold/components/text.html" with class="text-gray-400 dark:text-gray-500 text-center py-8" %}
+                            No data available
+                        {% endcomponent %}
+                    {% endfor %}
+                </div>
+            {% endcomponent %}
+
+            {# Category Revenue #}
+            {% component "unfold/components/card.html" %}
+                {% component "unfold/components/title.html" with class="mb-4" %}
+                    Revenue by Category
+                {% endcomponent %}
+                <div class="space-y-3">
+                    {% for cat in category_data %}
+                        <div class="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
+                            {% component "unfold/components/text.html" with class="font-medium text-gray-900 dark:text-white" %}
+                                {{ cat.product__category__name }}
+                            {% endcomponent %}
+                            {% component "unfold/components/text.html" with class="font-semibold text-blue-600 dark:text-blue-400" %}
+                                {{ cat.revenue|floatformat:0 }} UZS
+                            {% endcomponent %}
+                        </div>
+                    {% empty %}
+                        {% component "unfold/components/text.html" with class="text-gray-400 dark:text-gray-500 text-center py-8" %}
+                            No data available
+                        {% endcomponent %}
+                    {% endfor %}
+                </div>
+            {% endcomponent %}
+
+            {# Cashier Performance #}
+            {% component "unfold/components/card.html" %}
+                {% component "unfold/components/title.html" with class="mb-4" %}
+                    Top Cashiers
+                {% endcomponent %}
+                <div class="space-y-3">
+                    {% for cashier in cashier_performance %}
+                        <div class="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
+                            <div class="flex-1">
+                                {% component "unfold/components/text.html" with class="font-medium text-gray-900 dark:text-white" %}
+                                    {{ cashier.cashier__first_name }} {{ cashier.cashier__last_name }}
+                                {% endcomponent %}
+                                {% component "unfold/components/text.html" with class="text-sm text-gray-500 dark:text-gray-400" %}
+                                    {{ cashier.order_count }} orders
+                                {% endcomponent %}
+                            </div>
+                            {% component "unfold/components/text.html" with class="font-semibold text-purple-600 dark:text-purple-400" %}
+                                {{ cashier.total_revenue|floatformat:0 }} UZS
+                            {% endcomponent %}
+                        </div>
+                    {% empty %}
+                        {% component "unfold/components/text.html" with class="text-gray-400 dark:text-gray-500 text-center py-8" %}
+                            No data available
+                        {% endcomponent %}
+                    {% endfor %}
+                </div>
+            {% endcomponent %}
+        </div>
+    {% endcomponent %}
+
+    {# Store chart data in script tags #}
+    <script id="revenue-data" type="application/json">{{ revenue_chart_json|safe }}</script>
+    <script id="orders-data" type="application/json">{{ orders_chart_json|safe }}</script>
+
+    {# Chart.js Script #}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Revenue Chart
+            const revenueCtx = document.getElementById('revenueChart');
+            if (revenueCtx) {
+                try {
+                    const revenueDataEl = document.getElementById('revenue-data');
+                    const revenueData = JSON.parse(revenueDataEl.textContent);
+                    console.log('Revenue Chart Data:', revenueData);
+                    
+                    new Chart(revenueCtx, {
+                        type: 'line',
+                        data: revenueData,
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                intersect: false,
+                                mode: 'index',
+                            },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                },
+                                tooltip: {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                    padding: 12,
+                                    displayColors: false,
+                                    callbacks: {
+                                        label: function(context) {
+                                            return context.parsed.y.toLocaleString() + ' UZS';
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: function(value) {
+                                            return value.toLocaleString() + ' UZS';
+                                        }
+                                    },
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.05)',
+                                    }
+                                },
+                                x: {
+                                    grid: {
+                                        display: false,
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    console.log('Revenue chart created successfully');
+                } catch (error) {
+                    console.error('Error creating revenue chart:', error);
+                }
+            } else {
+                console.error('Revenue chart canvas not found');
+            }
+
+            // Orders Chart
+            const ordersCtx = document.getElementById('ordersChart');
+            if (ordersCtx) {
+                try {
+                    const ordersDataEl = document.getElementById('orders-data');
+                    const ordersData = JSON.parse(ordersDataEl.textContent);
+                    console.log('Orders Chart Data:', ordersData);
+                    
+                    new Chart(ordersCtx, {
+                        type: 'line',
+                        data: ordersData,
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                intersect: false,
+                                mode: 'index',
+                            },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                },
+                                tooltip: {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                    padding: 12,
+                                    displayColors: false,
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        stepSize: 1,
+                                        precision: 0
+                                    },
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.05)',
+                                    }
+                                },
+                                x: {
+                                    grid: {
+                                        display: false,
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    console.log('Orders chart created successfully');
+                } catch (error) {
+                    console.error('Error creating orders chart:', error);
+                }
+            } else {
+                console.error('Orders chart canvas not found');
+            }
+        });
+    </script>
+{% endblock %}

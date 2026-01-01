@@ -59,12 +59,35 @@ def create_order(request):
     cashier_id = user.id if user.role == 'CASHIER' else None
     
     items = data.get('items', [])
+    order_type = data.get('order_type', 'HALL')
+    phone_number = data.get('phone_number')
+    description = data.get('description')
     
     if not items or len(items) == 0:
         return APIResponse.validation_error(
             errors={'items': 'At least one item is required'},
             message='Order must contain items'
         )
+    
+    # Validate order type
+    if order_type not in ['HALL', 'DELIVERY', 'PICKUP']:
+        return APIResponse.validation_error(
+            errors={'order_type': 'Must be HALL, DELIVERY, or PICKUP'},
+            message='Invalid order type'
+        )
+    
+    # Validate DELIVERY requirements
+    if order_type == 'DELIVERY':
+        if not phone_number:
+            return APIResponse.validation_error(
+                errors={'phone_number': 'Phone number is required for delivery orders'},
+                message='Phone number required for delivery'
+            )
+        if not description:
+            return APIResponse.validation_error(
+                errors={'description': 'Delivery address is required'},
+                message='Delivery address required'
+            )
     
     for idx, item in enumerate(items):
         if 'product_id' not in item:
@@ -81,6 +104,9 @@ def create_order(request):
     result = OrderService.create_order(
         user_id=user_id,
         items=items,
+        order_type=order_type,
+        phone_number=phone_number,
+        description=description,
         cashier_id=cashier_id
     )
     
@@ -199,16 +225,19 @@ def pay_order(request, order_id):
     user = request.user
     
     # Only cashiers can mark orders as paid
-    if user.role != 'ADMIN':
+    if user.role != 'CASHIER':
         return APIResponse.error(
             message='Only cashiers can process payments',
             status_code=403
         )
     
-    result = OrderService.update_order_status(order_id, 'PAID', user.id)
+    result = OrderService.mark_as_paid(order_id, user.id)
     
     if result['success']:
-        return APIResponse.success(message='Order paid successfully')
+        return APIResponse.success(
+            data={'status': result.get('status')},
+            message=result['message']
+        )
     
     return APIResponse.error(message=result['message'])
 
@@ -221,7 +250,10 @@ def mark_ready(request, order_id):
     result = OrderService.mark_order_ready(order_id)
     
     if result['success']:
-        return APIResponse.success(message=result['message'])
+        return APIResponse.success(
+            data={'status': result.get('status')},
+            message=result['message']
+        )
     
     return APIResponse.error(message=result['message'])
 

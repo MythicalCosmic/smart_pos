@@ -77,10 +77,16 @@ class Product(models.Model):
 
 class Order(models.Model):
     class Status(models.TextChoices):
-        OPEN = "OPEN", "Open"              # Cashier is creating the order
-        PAID = "PAID", "Paid"              # Customer paid, waiting for chef
-        READY = "READY", "Ready"           # Chef finished preparing
-        CANCELED = "CANCELED", "Canceled"  # Order was canceled
+        OPEN = "OPEN", "Open"                      # Cashier is creating the order
+        PREPARING = "PREPARING", "Preparing"       # Sent to kitchen, being prepared
+        READY = "READY", "Ready"                   # Food is ready (may or may not be paid)
+        COMPLETED = "COMPLETED", "Completed"       # Both ready AND paid
+        CANCELED = "CANCELED", "Canceled"          # Order was canceled
+
+    class OrderType(models.TextChoices):
+        HALL = "HALL", "Hall (Dine-in)"
+        DELIVERY = "DELIVERY", "Delivery"
+        PICKUP = "PICKUP", "Pickup"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     cashier = models.ForeignKey(
@@ -94,11 +100,28 @@ class Order(models.Model):
     # Display ID that cycles from 1-100
     display_id = models.IntegerField(default=1)
     
-    status = models.CharField(
+    # Order type
+    order_type = models.CharField(
         max_length=10,
+        choices=OrderType.choices,
+        default=OrderType.HALL
+    )
+    
+    # Phone number (required for DELIVERY)
+    phone_number = models.CharField(max_length=20, null=True, blank=True)
+    
+    # Description/Address (required for DELIVERY, optional for others)
+    description = models.TextField(null=True, blank=True)
+    
+    status = models.CharField(
+        max_length=15,
         choices=Status.choices,
         default=Status.OPEN
     )
+
+    # Track payment and preparation separately
+    is_paid = models.BooleanField(default=False)
+    is_ready = models.BooleanField(default=False)
 
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -106,9 +129,23 @@ class Order(models.Model):
     
     # Track when order was marked as ready
     ready_at = models.DateTimeField(null=True, blank=True)
+    # Track when order was paid
+    paid_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
-        return f"Order #{self.display_id} - {self.status}"
+        return f"Order #{self.display_id} - {self.order_type} - {self.status}"
+    
+    def update_status(self):
+        """Automatically update status based on is_paid and is_ready flags"""
+        if self.is_ready and self.is_paid:
+            self.status = 'COMPLETED'
+        elif self.is_ready:
+            self.status = 'READY'
+        elif self.is_paid:
+            self.status = 'PREPARING'
+        else:
+            self.status = 'OPEN'
+        self.save()
 
 
 class OrderItem(models.Model):

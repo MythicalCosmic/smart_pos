@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import os
 
+from django.urls import reverse_lazy
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -67,10 +69,14 @@ ROOT_URLCONF = 'smart_jowi.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [
+            BASE_DIR / 'templates',  # Project-level templates
+            BASE_DIR / 'main' / 'templates',  # App-level templates
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
+                'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
@@ -153,3 +159,84 @@ CACHES = {
 
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+UNFOLD = {
+    "SITE_TITLE": "Smart Jowi Admin",
+    "SITE_HEADER": "Smart Jowi",
+    "SITE_URL": "/",
+    "SITE_SYMBOL": "local_cafe",
+    
+    # IMPORTANT: Dashboard callback - this is required!
+    "DASHBOARD_CALLBACK": "main.utils.dashboard.dashboard_callback",
+    
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": True,
+        "navigation": [
+            {
+                "title": "Dashboard",
+                "separator": False,
+                "items": [
+                    {
+                        "title": "Dashboard",
+                        "icon": "dashboard",
+                        "link": reverse_lazy("admin:index"),
+                    },
+                ],
+            },
+            {
+                "title": "Orders & Sales",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Orders",
+                        "icon": "shopping_cart",
+                        "link": reverse_lazy("admin:main_order_changelist"),
+                    },
+                    {
+                        "title": "Cash Register",
+                        "icon": "account_balance_wallet",
+                        "link": reverse_lazy("admin:main_cashregister_changelist"),
+                    },
+                    {
+                        "title": "Inkassa History",
+                        "icon": "receipt_long",
+                        "link": reverse_lazy("admin:main_inkassa_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Inventory",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Products",
+                        "icon": "inventory_2",
+                        "link": reverse_lazy("admin:main_product_changelist"),
+                    },
+                    {
+                        "title": "Categories",
+                        "icon": "category",
+                        "link": reverse_lazy("admin:main_category_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Users & Access",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Users",
+                        "icon": "people",
+                        "link": reverse_lazy("admin:main_user_changelist"),
+                    },
+                    {
+                        "title": "Sessions",
+                        "icon": "key",
+                        "link": reverse_lazy("admin:main_session_changelist"),
+                    },
+                ],
+            },
+        ],
+    },
+}
