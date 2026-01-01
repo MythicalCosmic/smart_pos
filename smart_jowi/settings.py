@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'main',
+    'client',
     'corsheaders',
     'rest_framework',
 ]
@@ -71,7 +72,8 @@ TEMPLATES = [
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
             BASE_DIR / 'templates',  # Project-level templates
-            BASE_DIR / 'main' / 'templates',  # App-level templates
+            BASE_DIR / 'main' / 'templates',  
+            BASE_DIR / 'client' / 'templates',# App-level templates
         ],
         'APP_DIRS': True,
         'OPTIONS': {

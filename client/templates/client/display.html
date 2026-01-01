@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Food</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0F1115;
+            color: #FFFFFF;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1A1D23;
+            border-bottom: 3px solid #FF7A00;
+            position: relative;
+        }
+
+        .logo {
+            font-size: 2rem;
+            font-weight: 900;
+            color: #FF7A00;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        .logo-placeholder {
+            width: 60px;
+            height: 60px;
+            margin-right: 15px;
+            background: #FF7A00;
+            border-radius: 8px;
+            opacity: 0.15;
+        }
+
+        .time {
+            position: absolute;
+            right: 40px;
+            font-size: 1.5rem;
+            color: #B0B0B0;
+            font-weight: 600;
+        }
+
+        .container {
+            display: flex;
+            height: calc(100vh - 80px);
+        }
+
+        .panel {
+            flex: 1;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .panel-bg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            height: 300px;
+            background: #FF7A00;
+            border-radius: 50%;
+            opacity: 0.03;
+            pointer-events: none;
+        }
+
+        .processing {
+            border-right: 2px solid #1A1D23;
+        }
+
+        .panel-title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 30px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+
+        .processing .panel-title {
+            color: #FF7A00;
+        }
+
+        .ready .panel-title {
+            color: #4CAF50;
+        }
+
+        .orders {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-content: start;
+            justify-content: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .order {
+            width: 140px;
+            height: 140px;
+            background: #1A1D23;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            font-weight: 900;
+        }
+
+        .processing .order {
+            color: #FF7A00;
+            border: 3px solid #FF7A00;
+        }
+
+        .ready .order {
+            color: #4CAF50;
+            border: 3px solid #4CAF50;
+        }
+
+        .empty {
+            color: #B0B0B0;
+            font-size: 1.2rem;
+            opacity: 0.5;
+        }
+
+        @media (min-width: 1920px) {
+            .order {
+                width: 180px;
+                height: 180px;
+                font-size: 5rem;
+            }
+            .panel-bg {
+                width: 400px;
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo-placeholder"></div>
+        <div class="logo">Smart Food</div>
+        <div class="time" id="time"></div>
+    </header>
+
+    <div class="container">
+        <div class="panel processing">
+            <div class="panel-bg"></div>
+            <div class="panel-title">Tayyorlanmoqda</div>
+            <div class="orders" id="processing"></div>
+        </div>
+
+        <div class="panel ready">
+            <div class="panel-bg"></div>
+            <div class="panel-title">Tayyor</div>
+            <div class="orders" id="ready"></div>
+        </div>
+    </div>
+
+    <script>
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('time').textContent = 
+                now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        async function fetchOrders() {
+            try {
+                const res = await fetch('{% url "client:orders_data" %}');
+                const data = await res.json();
+
+                document.getElementById('processing').innerHTML = data.processing.length
+                    ? data.processing.map(o => `<div class="order">${String(o.display_id).padStart(2, '0')}</div>`).join('')
+                    : '<div class="empty">Buyurtmalar yo\'q</div>';
+
+                document.getElementById('ready').innerHTML = data.finished.length
+                    ? data.finished.map(o => `<div class="order">${String(o.display_id).padStart(2, '0')}</div>`).join('')
+                    : '<div class="empty">Buyurtmalar yo\'q</div>';
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        fetchOrders();
+        setInterval(fetchOrders, 3000);
+    </script>
+</body>
+</html>
