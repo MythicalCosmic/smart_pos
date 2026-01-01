@@ -290,25 +290,46 @@ class OrderService:
     
     @staticmethod
     def update_order_status(order_id, status, cashier_id=None):
-        """Legacy method - use mark_as_paid or mark_as_ready instead"""
+        """Legacy method - updates order status after validation"""
         try:
             order = Order.objects.get(id=order_id)
-            
-            if status not in ['OPEN', 'PREPARING', 'READY', 'COMPLETED', 'CANCELED']:
-                return {'success': False, 'message': 'Invalid status'}
-            
-            if status == 'CANCELED':
-                order.status = 'CANCELED'
-                order.save()
-                return {'success': True, 'message': 'Order canceled'}
-            
-            # For other statuses, use the proper methods
-            return {'success': False, 'message': 'Use mark_as_paid or mark_as_ready methods instead'}
-            
+
+            ALLOWED_STATUSES = [
+                'OPEN',
+                'PREPARING',
+                'READY',
+                'COMPLETED',
+                'CANCELED'
+            ]
+
+            if status not in ALLOWED_STATUSES:
+                return {
+                    'success': False,
+                    'message': f'Invalid status. Allowed: {", ".join(ALLOWED_STATUSES)}'
+                }
+
+            order.status = status
+
+            if cashier_id is not None:
+                order.cashier_id = cashier_id
+
+            order.save(update_fields=['status', 'cashier_id'] if cashier_id else ['status'])
+
+            return {
+                'success': True,
+                'message': f'Order status updated to {status}',
+                'order_id': order.id
+            }
+
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
+
         except Exception as e:
-            return {'success': False, 'message': f'Failed to update status: {str(e)}'}
+            return {
+                'success': False,
+                'message': f'Failed to update status: {str(e)}'
+            }
+
     
     @staticmethod
     def mark_as_paid(order_id, cashier_id):
