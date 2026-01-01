@@ -5,15 +5,9 @@ from main.models import Product, Category
 
 
 class ProductService:
-    CACHE_TTL = 300
     
     @staticmethod
     def get_all_products(page=1, per_page=20, search=None, category_id=None, order_by='-created_at'):
-        cache_key = f'products:all:{page}:{per_page}:{search}:{category_id}:{order_by}'
-        cached_data = cache.get(cache_key)
-        
-        if cached_data:
-            return cached_data
         
         queryset = Product.objects.select_related('category').all()
         
@@ -59,17 +53,11 @@ class ProductService:
             }
         }
         
-        cache.set(cache_key, result, ProductService.CACHE_TTL)
         return result
     
     @staticmethod
     def get_products_by_category(category_id):
-        cache_key = f'products:category:{category_id}'
-        cached_data = cache.get(cache_key)
-        
-        if cached_data:
-            return cached_data
-        
+
         try:
             category = Category.objects.get(id=category_id, status='ACTIVE')
             products = Product.objects.filter(category=category).values(
@@ -85,18 +73,12 @@ class ProductService:
                 'products': list(products)
             }
             
-            cache.set(cache_key, result, ProductService.CACHE_TTL)
             return result
         except Category.DoesNotExist:
             return {'success': False, 'message': 'Category not found'}
     
     @staticmethod
     def get_product_by_id(product_id):
-        cache_key = f'product:id:{product_id}'
-        cached_data = cache.get(cache_key)
-        
-        if cached_data:
-            return cached_data
         
         try:
             product = Product.objects.select_related('category').get(id=product_id)
@@ -116,7 +98,6 @@ class ProductService:
                     'updated_at': product.updated_at.isoformat()
                 }
             }
-            cache.set(cache_key, result, ProductService.CACHE_TTL)
             return result
         except Product.DoesNotExist:
             return {'success': False, 'message': 'Product not found'}
@@ -136,8 +117,6 @@ class ProductService:
                 price=price,
                 category_id=category_id
             )
-            
-            ProductService._clear_cache()
             
             return {
                 'success': True,
@@ -195,12 +174,6 @@ class ProductService:
     
     @staticmethod
     def get_product_stats():
-        cache_key = 'products:stats'
-        cached_data = cache.get(cache_key)
-        
-        if cached_data:
-            return cached_data
-        
         total = Product.objects.count()
         by_category = Product.objects.values('category__name').annotate(count=Count('id'))
         
@@ -212,7 +185,6 @@ class ProductService:
             }
         }
         
-        cache.set(cache_key, result, ProductService.CACHE_TTL)
         return result
     
     @staticmethod
