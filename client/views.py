@@ -62,7 +62,6 @@ def get_chef_orders_data(request):
     orders = Order.objects.filter(
         status='PREPARING'
     ).select_related('user').prefetch_related('items__product').order_by('created_at')
-    
     orders_list = [
         {
             'id': order.id,
@@ -75,7 +74,8 @@ def get_chef_orders_data(request):
             'items': [
                 {
                     'product_name': item.product.name,
-                    'quantity': item.quantity
+                    'quantity': item.quantity,
+                    'detail': item.detail
                 }
                 for item in order.items.all()
             ],

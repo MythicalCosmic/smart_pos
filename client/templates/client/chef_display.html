@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 {% load static %}
 <html lang="uz">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -230,7 +231,7 @@
         .order-type {
             font-size: 0.75rem;
             font-weight: 700;
-            background: rgba(0,0,0,0.2);
+            background: rgba(0, 0, 0, 0.2);
             padding: 4px 10px;
             border-radius: 20px;
             display: inline-block;
@@ -288,11 +289,15 @@
         }
 
         .item {
+            padding: 10px 0;
+            border-bottom: 1px solid #2a2d33;
+        }
+        
+        .item-info {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #2a2d33;
+            gap: 4px;
         }
 
         .item:last-child {
@@ -395,12 +400,15 @@
                 min-width: 400px;
                 max-width: 400px;
             }
+
             .order-number {
                 font-size: 2.8rem;
             }
+
             .item-name {
                 font-size: 1.3rem;
             }
+
             .item-qty {
                 font-size: 1.5rem;
             }
@@ -414,6 +422,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="start-overlay" id="startOverlay">
         <h1>👨‍🍳 Smart Food</h1>
@@ -450,26 +459,26 @@
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 }
-                
+
                 const now = audioCtx.currentTime;
-                
+
                 [0, 0.12, 0.24].forEach((delay, i) => {
                     const osc = audioCtx.createOscillator();
                     const gain = audioCtx.createGain();
-                    
+
                     osc.connect(gain);
                     gain.connect(audioCtx.destination);
-                    
+
                     osc.frequency.setValueAtTime(600 + (i * 150), now + delay);
                     osc.type = 'square';
-                    
+
                     gain.gain.setValueAtTime(0.25, now + delay);
                     gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.1);
-                    
+
                     osc.start(now + delay);
                     osc.stop(now + delay + 0.1);
                 });
-                
+
             } catch (e) {
                 console.log('Sound error:', e);
             }
@@ -488,7 +497,7 @@
 
         function updateTime() {
             const now = new Date();
-            document.getElementById('time').textContent = 
+            document.getElementById('time').textContent =
                 now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', hour12: false });
         }
         setInterval(updateTime, 1000);
@@ -500,13 +509,13 @@
             const mins = Math.floor((now - date) / 60000);
             if (mins < 1) return 'Hozirgina';
             if (mins < 60) return `${mins} daq oldin`;
-            return `${Math.floor(mins/60)} soat oldin`;
+            return `${Math.floor(mins / 60)} soat oldin`;
         }
 
         async function markReady(orderId, btn) {
             btn.disabled = true;
             btn.innerHTML = '⏳ Kutib turing...';
-            
+
             try {
                 const res = await fetch(`{% url "client:chef_mark_ready" order_id=0 %}`.replace('0', orderId), {
                     method: 'POST',
@@ -515,7 +524,7 @@
                         'X-CSRFToken': '{{ csrf_token }}'
                     }
                 });
-                
+
                 if (res.ok) {
                     const card = btn.closest('.order-card');
                     card.style.transition = 'all 0.4s ease';
@@ -551,7 +560,7 @@
             const count = document.querySelectorAll('.order-card').length;
             document.getElementById('orderCount').textContent = count;
         }
-        
+
         const orderTypeMap = {
             HALL: "Zalda",
             PICKUP: "Olib ketish",
@@ -559,15 +568,21 @@
         };
 
         function createOrderCard(order) {
+            console.log(order)
             const items = order.items.map(item => `
                 <div class="item">
-                    <span class="item-name">${item.product_name}</span>
-                    <span class="item-qty">×${item.quantity}</span>
+                    <div class="item-info">
+                        <span class="item-name">${item.product_name}</span>
+                
+                        <span class="item-qty">×${item.quantity}</span>
+                    </div>
+                    ${item.detail ? `<span class="item-detail">${item.detail}</span>` : ''}
                 </div>
+
             `).join('');
 
             const unpaidClass = order.is_paid ? '' : 'unpaid';
-            const paymentBadge = order.is_paid 
+            const paymentBadge = order.is_paid
                 ? '<span class="payment-badge paid">TO\'LANGAN</span>'
                 : '<span class="payment-badge unpaid">TO\'LANMAGAN</span>';
 
@@ -592,11 +607,11 @@
         function distributeOrdersToColumns(orders) {
             const numColumns = Math.max(COLUMNS, Math.ceil(orders.length / 3));
             const columns = Array.from({ length: numColumns }, () => []);
-            
+
             orders.forEach((order, index) => {
                 columns[index % numColumns].push(order);
             });
-            
+
             return columns
                 .filter(col => col.length > 0)
                 .map(column => `
@@ -627,7 +642,7 @@
                     playSound();
                 }
 
-                const ordersChanged = data.orders.length !== knownOrders.size || 
+                const ordersChanged = data.orders.length !== knownOrders.size ||
                     data.orders.some(o => !knownOrders.has(o.id));
 
                 if (ordersChanged || isFirstLoad) {
@@ -665,4 +680,5 @@
         setInterval(fetchOrders, 3000);
     </script>
 </body>
+
 </html>
