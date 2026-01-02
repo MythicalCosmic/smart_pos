@@ -14,7 +14,6 @@ class OrderService:
     
     @staticmethod
     def _get_next_display_id():
-        """Get next display ID (cycles from 1-100)"""
         last_order = Order.objects.aggregate(max_id=Max('display_id'))
         max_id = last_order['max_id']
         
@@ -140,18 +139,10 @@ class OrderService:
             if not items or len(items) == 0:
                 return {'success': False, 'message': 'Order must have at least one item'}
             
-            # Validate order type
             if order_type not in ['HALL', 'DELIVERY', 'PICKUP']:
                 return {'success': False, 'message': 'Invalid order type. Must be HALL, DELIVERY, or PICKUP'}
-            
-            # Validate DELIVERY requirements
-            if order_type == 'DELIVERY':
-                if not phone_number:
-                    return {'success': False, 'message': 'Phone number is required for delivery orders'}
-                if not description:
-                    return {'success': False, 'message': 'Delivery address is required for delivery orders'}
-            
-            # Get next display ID
+
+
             display_id = OrderService._get_next_display_id()
             
             order = Order.objects.create(
@@ -290,7 +281,6 @@ class OrderService:
     
     @staticmethod
     def update_order_status(order_id, status, cashier_id=None):
-        """Legacy method - updates order status after validation"""
         try:
             order = Order.objects.get(id=order_id)
 
@@ -333,7 +323,6 @@ class OrderService:
     
     @staticmethod
     def mark_as_paid(order_id, cashier_id):
-        """Mark order as paid"""
         try:
             order = Order.objects.get(id=order_id)
             
@@ -342,17 +331,15 @@ class OrderService:
             
             if order.is_paid:
                 return {'success': False, 'message': 'Order is already paid'}
-            
-            # Validate cashier
+
             if not User.objects.filter(id=cashier_id).exists():
                 return {'success': False, 'message': 'Invalid cashier'}
             
             order.cashier_id = cashier_id
             order.is_paid = True
             order.paid_at = timezone.now()
-            order.update_status()  # Auto-update status
-            
-            # Add money to cash register
+            order.update_status()  
+
             InkassaService.add_to_register(order.total_amount)
             
             return {'success': True, 'message': 'Order marked as paid', 'status': order.status}
@@ -363,7 +350,6 @@ class OrderService:
     
     @staticmethod
     def mark_order_ready(order_id):
-        """Chef marks order as ready/finished"""
         try:
             order = Order.objects.get(id=order_id)
             
@@ -375,7 +361,7 @@ class OrderService:
             
             order.is_ready = True
             order.ready_at = timezone.now()
-            order.update_status()  # Auto-update status
+            order.update_status()
             
             return {'success': True, 'message': 'Order marked as ready', 'status': order.status}
         except Order.DoesNotExist:
@@ -385,20 +371,12 @@ class OrderService:
     
     @staticmethod
     def get_client_display_orders():
-        """
-        Get orders for CLIENT display screen
-        - Processing: Orders that are OPEN or PAID (not ready yet)
-        - Finished: Orders that are READY and within last 5 minutes
-        """
-        
         five_minutes_ago = timezone.now() - timedelta(minutes=5)
-        
-        # Processing: OPEN or PAID orders
+
         processing = Order.objects.filter(
             status__in=['OPEN', 'PAID']
         ).select_related('user').order_by('created_at')
-        
-        # Finished: READY orders from last 5 minutes
+
         finished = Order.objects.filter(
             status='READY',
             ready_at__gte=five_minutes_ago
@@ -435,13 +413,6 @@ class OrderService:
     
     @staticmethod
     def get_chef_display_orders():
-        """
-        Get orders for CHEF display screen
-        - Shows all PAID orders that need to be prepared
-        - Does NOT show OPEN, READY, or CANCELED orders
-        """
-        
-        # Only show PAID orders - these need to be prepared
         orders = Order.objects.filter(
             status='PAID'
         ).select_related('user').prefetch_related('items__product').order_by('created_at')

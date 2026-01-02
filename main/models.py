@@ -27,7 +27,7 @@ class User(models.Model):
         default=UserStatus.ACTIVE
     )
 
-    last_login_at = models.DateTimeField(auto_now_add=True)
+    last_login_at = models.DateTimeField(null=True, blank=True)
     last_login_api = models.CharField(max_length=20, null=True, blank=True)
 
     def __str__(self):
@@ -97,20 +97,16 @@ class Order(models.Model):
         related_name="handled_orders"
     )
 
-    # Display ID that cycles from 1-100
     display_id = models.IntegerField(default=1)
     
-    # Order type
     order_type = models.CharField(
         max_length=10,
         choices=OrderType.choices,
         default=OrderType.HALL
     )
     
-    # Phone number (required for DELIVERY)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     
-    # Description/Address (required for DELIVERY, optional for others)
     description = models.TextField(null=True, blank=True)
     
     status = models.CharField(
@@ -119,7 +115,6 @@ class Order(models.Model):
         default=Status.OPEN
     )
 
-    # Track payment and preparation separately
     is_paid = models.BooleanField(default=False)
     is_ready = models.BooleanField(default=False)
 

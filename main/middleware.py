@@ -14,7 +14,13 @@ class JSONOnlyMiddleware(MiddlewareMixin):
             return response
 
         status_code = response.status_code
+        
+        # Let successful responses pass through
         if 200 <= status_code < 300:
+            return response
+        
+        # Let ALL redirects pass through (for admin panel, login, etc.)
+        if 300 <= status_code < 400:
             return response
         
         status_message = self._get_fancy_status_message(status_code)

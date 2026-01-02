@@ -22,8 +22,8 @@ class AuthService:
             if User.objects.filter(email=email).exists():
                 return {'success': False, 'user': None, 'token': None, 'message': 'Email already registered'}
             
-            if len(password) < 2:
-                return {'success': False, 'user': None, 'token': None, 'message': 'Password must be at least 8 characters'}
+            if len(password) < 4:
+                return {'success': False, 'user': None, 'token': None, 'message': 'Password must be at least 4 characters'}
             
             user = User.objects.create(
                 first_name=first_name,

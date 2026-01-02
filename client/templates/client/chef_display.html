@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
@@ -20,6 +21,58 @@
             overflow: hidden;
         }
 
+        /* Start overlay */
+        .start-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 17, 21, 0.98);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            cursor: pointer;
+        }
+
+        .start-overlay h1 {
+            font-size: 3rem;
+            color: #FF7A00;
+            margin-bottom: 10px;
+        }
+
+        .start-overlay .start-subtitle {
+            font-size: 1.2rem;
+            color: #B0B0B0;
+            margin-bottom: 40px;
+        }
+
+        .start-btn {
+            padding: 20px 60px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: #FF7A00;
+            color: #0F1115;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            transition: all 0.2s;
+        }
+
+        .start-btn:hover {
+            background: #ff8c1a;
+            transform: scale(1.05);
+        }
+
+        .start-overlay.hidden {
+            display: none;
+        }
+
+        /* Header */
         .header {
             height: 80px;
             display: flex;
@@ -55,7 +108,7 @@
             font-weight: 600;
         }
 
-        .subtitle {
+        .header-subtitle {
             position: absolute;
             left: 40px;
             font-size: 1.2rem;
@@ -65,10 +118,23 @@
             letter-spacing: 2px;
         }
 
+        .order-count {
+            position: absolute;
+            left: 160px;
+            background: #FF7A00;
+            color: #0F1115;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        /* Container */
         .container {
             height: calc(100vh - 80px);
-            padding: 30px;
+            padding: 20px;
             position: relative;
+            overflow: hidden;
         }
 
         .panel-bg {
@@ -76,73 +142,86 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 400px;
-            height: 400px;
+            width: 500px;
+            height: 500px;
             background: #FF7A00;
             border-radius: 50%;
-            opacity: 0.03;
+            opacity: 0.02;
             pointer-events: none;
         }
 
-        .panel-title {
-            text-align: center;
-            font-size: 2rem;
-            font-weight: 700;
-            margin-bottom: 30px;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            color: #FF7A00;
-        }
-
+        /* Orders Grid - masonry columns, no scroll */
         .orders {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 20px;
-            overflow-y: auto;
-            max-height: calc(100vh - 200px);
+            column-count: 4;
+            column-gap: 20px;
+            height: calc(100vh - 120px);
             padding: 10px;
             position: relative;
             z-index: 1;
         }
 
+        /* Order Card - auto height, no break inside */
         .order-card {
             background: #1A1D23;
             border-radius: 16px;
-            border: 3px solid #FF7A00;
+            border: 3px solid #2a2d33;
             overflow: hidden;
+            transition: border-color 0.2s ease;
+            display: inline-block;
+            width: 100%;
+            margin-bottom: 20px;
+            break-inside: avoid;
         }
 
+        .order-card:hover {
+            border-color: #FF7A00;
+        }
+
+        /* Order Header */
         .order-header {
-            background: #FF7A00;
+            background: linear-gradient(135deg, #FF7A00 0%, #ff9533 100%);
             color: #0F1115;
-            padding: 15px 20px;
+            padding: 12px 15px;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         .order-number {
-            font-size: 2.5rem;
+            font-size: 2.2rem;
             font-weight: 900;
+            line-height: 1;
+        }
+
+        .order-meta {
+            text-align: right;
         }
 
         .order-type {
-            font-size: 0.9rem;
+            font-size: 0.75rem;
             font-weight: 700;
             background: rgba(0,0,0,0.2);
-            padding: 5px 12px;
+            padding: 4px 10px;
             border-radius: 20px;
+            display: inline-block;
         }
 
+        .order-time {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            margin-top: 3px;
+        }
+
+        /* Order Items - auto height */
         .order-items {
-            padding: 15px 20px;
+            padding: 12px 18px;
         }
 
         .item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px 0;
+            padding: 10px 0;
             border-bottom: 1px solid #2a2d33;
         }
 
@@ -151,9 +230,11 @@
         }
 
         .item-name {
-            font-size: 1.1rem;
+            font-size: 1.15rem;
             font-weight: 600;
             color: #FFFFFF;
+            flex: 1;
+            margin-right: 15px;
         }
 
         .item-qty {
@@ -161,32 +242,37 @@
             font-weight: 900;
             color: #FF7A00;
             background: rgba(255, 122, 0, 0.1);
-            padding: 5px 15px;
+            padding: 6px 14px;
             border-radius: 8px;
             min-width: 50px;
             text-align: center;
         }
 
+        /* Ready Button */
         .btn-ready {
             width: 100%;
-            padding: 18px;
-            background: #4CAF50;
+            padding: 16px;
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
             color: #FFFFFF;
             border: none;
-            font-size: 1.2rem;
+            font-size: 1.15rem;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 2px;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         .btn-ready:hover {
-            background: #45a049;
+            background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
         }
 
         .btn-ready:active {
-            background: #3d8b40;
+            transform: scale(0.98);
         }
 
         .btn-ready:disabled {
@@ -194,42 +280,68 @@
             cursor: not-allowed;
         }
 
+        /* Empty State */
         .empty {
             text-align: center;
             color: #B0B0B0;
             font-size: 1.5rem;
-            opacity: 0.5;
+            opacity: 0.4;
             padding: 100px;
-            grid-column: 1 / -1;
+            width: 100%;
         }
 
-        .orders::-webkit-scrollbar {
-            width: 8px;
+        .empty-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
         }
 
-        .orders::-webkit-scrollbar-track {
-            background: #1A1D23;
-            border-radius: 4px;
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .orders {
+                column-count: 3;
+            }
         }
 
-        .orders::-webkit-scrollbar-thumb {
-            background: #333;
-            border-radius: 4px;
+        @media (max-width: 900px) {
+            .orders {
+                column-count: 2;
+            }
         }
 
         @media (min-width: 1920px) {
             .orders {
-                grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+                column-count: 5;
             }
             .order-number {
-                font-size: 3rem;
+                font-size: 2.8rem;
+            }
+            .item-name {
+                font-size: 1.3rem;
+            }
+            .item-qty {
+                font-size: 1.5rem;
+            }
+        }
+
+        @media (min-width: 2560px) {
+            .orders {
+                column-count: 6;
             }
         }
     </style>
 </head>
 <body>
+    <!-- Start overlay -->
+    <div class="start-overlay" id="startOverlay">
+        <h1>👨‍🍳 Smart Food</h1>
+        <p class="start-subtitle">Oshxona paneli</p>
+        <button class="start-btn">Boshlash</button>
+    </div>
+
     <header class="header">
-        <div class="subtitle">Oshxona</div>
+        <div class="header-subtitle">Oshxona</div>
+        <span class="order-count" id="orderCount">0</span>
         <div class="logo-placeholder"></div>
         <div class="logo">Smart Food</div>
         <div class="time" id="time"></div>
@@ -237,11 +349,66 @@
 
     <div class="container">
         <div class="panel-bg"></div>
-        <div class="panel-title">Buyurtmalar</div>
-        <div class="orders" id="orders"></div>
+        <div class="orders" id="orders">
+            <div class="empty">
+                <div class="empty-icon">👨‍🍳</div>
+                Buyurtmalar yo'q
+            </div>
+        </div>
     </div>
 
     <script>
+        // Track orders for new order detection
+        const knownOrders = new Set();
+        let isFirstLoad = true;
+        let audioCtx = null;
+
+        // Generate urgent alert sound - 3 quick beeps
+        function playSound() {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                
+                const now = audioCtx.currentTime;
+                
+                // 3 urgent beeps - ascending
+                [0, 0.12, 0.24].forEach((delay, i) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    
+                    // Ascending urgent tones
+                    osc.frequency.setValueAtTime(600 + (i * 150), now + delay);
+                    osc.type = 'square';
+                    
+                    gain.gain.setValueAtTime(0.25, now + delay);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.1);
+                    
+                    osc.start(now + delay);
+                    osc.stop(now + delay + 0.1);
+                });
+                
+            } catch (e) {
+                console.log('Sound error:', e);
+            }
+        }
+
+        // Unlock audio on start
+        function unlockAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(0, audioCtx.currentTime);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.01);
+        }
+
+        // Time
         function updateTime() {
             const now = new Date();
             document.getElementById('time').textContent = 
@@ -250,9 +417,27 @@
         setInterval(updateTime, 1000);
         updateTime();
 
+        // Format time ago
+        function timeAgo(dateStr) {
+            const now = new Date();
+            const date = new Date(dateStr);
+            const mins = Math.floor((now - date) / 60000);
+            if (mins < 1) return 'Hozirgina';
+            if (mins < 60) return `${mins} daq oldin`;
+            return `${Math.floor(mins/60)} soat oldin`;
+        }
+        const orderTypeMap = {
+        HALL: "Zalda",
+        PICKUP: "Olib ketish",
+        DELIVERY: "Yetkazib berish"
+    };
+
+
+
+        // Mark ready
         async function markReady(orderId, btn) {
             btn.disabled = true;
-            btn.textContent = 'Kutib turing...';
+            btn.innerHTML = '⏳ Kutib turing...';
             
             try {
                 const res = await fetch(`{% url "client:chef_mark_ready" order_id=0 %}`.replace('0', orderId), {
@@ -265,46 +450,61 @@
                 
                 if (res.ok) {
                     const card = btn.closest('.order-card');
-                    card.style.transition = 'all 0.3s ease';
+                    card.style.transition = 'all 0.4s ease';
                     card.style.opacity = '0';
-                    card.style.transform = 'scale(0.8)';
+                    card.style.transform = 'scale(0.8) translateY(-20px)';
                     setTimeout(() => {
                         card.remove();
+                        knownOrders.delete(orderId);
+                        updateOrderCount();
                         if (document.querySelectorAll('.order-card').length === 0) {
-                            document.getElementById('orders').innerHTML = '<div class="empty">Buyurtmalar yo\'q</div>';
+                            document.getElementById('orders').innerHTML = `
+                                <div class="empty">
+                                    <div class="empty-icon">✅</div>
+                                    Barcha buyurtmalar tayyor!
+                                </div>
+                            `;
                         }
-                    }, 300);
+                    }, 400);
                 } else {
                     btn.disabled = false;
-                    btn.textContent = 'Tayyor ❌';
-                    setTimeout(() => { btn.textContent = 'Tayyor'; }, 2000);
+                    btn.innerHTML = '❌ Xatolik';
+                    setTimeout(() => { btn.innerHTML = '✓ Tayyor'; }, 2000);
                 }
             } catch (e) {
                 console.error(e);
                 btn.disabled = false;
-                btn.textContent = 'Tayyor ❌';
-                setTimeout(() => { btn.textContent = 'Tayyor'; }, 2000);
+                btn.innerHTML = '❌ Xatolik';
+                setTimeout(() => { btn.innerHTML = '✓ Tayyor'; }, 2000);
             }
+        }
+
+        function updateOrderCount() {
+            const count = document.querySelectorAll('.order-card').length;
+            document.getElementById('orderCount').textContent = count;
         }
 
         function createOrderCard(order) {
             const items = order.items.map(item => `
                 <div class="item">
                     <span class="item-name">${item.product_name}</span>
-                    <span class="item-qty">x${item.quantity}</span>
+                    <span class="item-qty">×${item.quantity}</span>
                 </div>
             `).join('');
 
             return `
                 <div class="order-card" data-id="${order.id}">
                     <div class="order-header">
-                        <span class="order-number">${String(order.display_id).padStart(2, '0')}</span>
-                        <span class="order-type">${order.order_type || 'HALL'}</span>
+                        <span class="order-number">#${String(order.display_id).padStart(2, '0')}</span>
+                        <div class="order-meta">
+                            <span class="order-type">${orderTypeMap[order.order_type] || "Zalda"}</span>
+                            <div class="order-time">${timeAgo(order.created_at)}</div>
+                        </div>
                     </div>
                     <div class="order-items">
                         ${items}
                     </div>
-                    <button class="btn-ready" onclick="markReady(${order.id}, this)">Tayyor</button>
+                    <button class="btn-ready" onclick="markReady(${order.id}, this)">✓ Tayyor</button>
                 </div>
             `;
         }
@@ -314,16 +514,66 @@
                 const res = await fetch('{% url "client:chef_orders_data" %}');
                 const data = await res.json();
 
-                document.getElementById('orders').innerHTML = data.orders.length
-                    ? data.orders.map(o => createOrderCard(o)).join('')
-                    : '<div class="empty">Buyurtmalar yo\'q</div>';
+                let hasNewOrder = false;
+                const currentIds = new Set();
+                const newOrderIds = new Set();
+
+                // Check for new orders
+                data.orders.forEach(order => {
+                    currentIds.add(order.id);
+                    if (!knownOrders.has(order.id) && !isFirstLoad) {
+                        hasNewOrder = true;
+                        newOrderIds.add(order.id);
+                    }
+                });
+
+                // Play sound for new orders
+                if (hasNewOrder) {
+                    playSound();
+                }
+
+                // Only update DOM if orders changed
+                const ordersChanged = data.orders.length !== knownOrders.size || 
+                    data.orders.some(o => !knownOrders.has(o.id));
+
+                if (ordersChanged || isFirstLoad) {
+                    // Update known orders
+                    knownOrders.clear();
+                    data.orders.forEach(o => knownOrders.add(o.id));
+
+                    // Render
+                    if (data.orders.length > 0) {
+                        document.getElementById('orders').innerHTML = data.orders
+                            .map(o => createOrderCard(o))
+                            .join('');
+                    } else {
+                        document.getElementById('orders').innerHTML = `
+                            <div class="empty">
+                                <div class="empty-icon">👨‍🍳</div>
+                                Buyurtmalar yo'q
+                            </div>
+                        `;
+                    }
+
+                    updateOrderCount();
+                }
+
+                isFirstLoad = false;
+
             } catch (e) {
                 console.error(e);
             }
         }
 
+        // Start overlay
+        document.getElementById('startOverlay').addEventListener('click', () => {
+            unlockAudio();
+            playSound(); // Play once so they know it works
+            document.getElementById('startOverlay').classList.add('hidden');
+        });
+
         fetchOrders();
-        setInterval(fetchOrders, 5000);
+        setInterval(fetchOrders, 3000);
     </script>
 </body>
 </html>

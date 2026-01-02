@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
@@ -135,10 +136,68 @@
             border: 3px solid #4CAF50;
         }
 
+        .ready .order.new {
+            animation: pulse 0.5s ease 3;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
         .empty {
             color: #B0B0B0;
             font-size: 1.2rem;
             opacity: 0.5;
+        }
+
+        /* Start overlay - click once to enable sound */
+        .start-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 17, 21, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            cursor: pointer;
+        }
+
+        .start-overlay h1 {
+            font-size: 3rem;
+            color: #FF7A00;
+            margin-bottom: 20px;
+        }
+
+        .start-overlay p {
+            font-size: 1.5rem;
+            color: #B0B0B0;
+            margin-bottom: 40px;
+        }
+
+        .start-btn {
+            padding: 20px 60px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: #FF7A00;
+            color: #0F1115;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .start-btn:hover {
+            background: #ff8c1a;
+        }
+
+        .start-overlay.hidden {
+            display: none;
         }
 
         @media (min-width: 1920px) {
@@ -155,6 +214,13 @@
     </style>
 </head>
 <body>
+    <!-- Start overlay - click to enable sound -->
+    <div class="start-overlay" id="startOverlay">
+        <h1>🍔 Smart Food</h1>
+        <p>Ovozli bildirishnomalarni yoqish uchun bosing</p>
+        <button class="start-btn">Boshlash</button>
+    </div>
+
     <header class="header">
         <div class="logo-placeholder"></div>
         <div class="logo">Smart Food</div>
@@ -176,6 +242,38 @@
     </div>
 
     <script>
+        // Track which orders we've already played sound for
+        const notifiedOrders = new Set();
+        let isFirstLoad = true;
+
+        // Sound paths to try (in order)
+        const soundPaths = [
+            '/media/sound/notifier.wav',
+            '/static/sound/notifier.wav',
+            '{% static "sound/notifier.wav" %}'
+        ];
+        
+        let notificationSound = new Audio(soundPaths[0]);
+        notificationSound.volume = 1.0;
+        let pathIndex = 0;
+        
+        // Try next path if current fails
+        notificationSound.addEventListener('error', function() {
+            pathIndex++;
+            if (pathIndex < soundPaths.length) {
+                console.log('Trying sound path:', soundPaths[pathIndex]);
+                notificationSound = new Audio(soundPaths[pathIndex]);
+                notificationSound.volume = 1.0;
+            } else {
+                console.log('All sound paths failed');
+            }
+        });
+
+        function playNotificationSound() {
+            notificationSound.currentTime = 0;
+            notificationSound.play().catch(e => console.log('Play error:', e));
+        }
+
         function updateTime() {
             const now = new Date();
             document.getElementById('time').textContent = 
@@ -189,17 +287,66 @@
                 const res = await fetch('{% url "client:orders_data" %}');
                 const data = await res.json();
 
+                // Check for new ready orders
+                let hasNewReady = false;
+                const currentReadyIds = new Set();
+
+                data.finished.forEach(order => {
+                    currentReadyIds.add(order.id);
+                    if (!notifiedOrders.has(order.id) && !isFirstLoad) {
+                        hasNewReady = true;
+                        notifiedOrders.add(order.id);
+                    } else if (isFirstLoad) {
+                        notifiedOrders.add(order.id);
+                    }
+                });
+
+                // Play sound if new order is ready
+                if (hasNewReady) {
+                    playNotificationSound();
+                }
+
+                // Clean up old notifications (remove orders no longer in ready list)
+                notifiedOrders.forEach(id => {
+                    if (!currentReadyIds.has(id)) {
+                        notifiedOrders.delete(id);
+                    }
+                });
+
+                // Update processing orders
                 document.getElementById('processing').innerHTML = data.processing.length
                     ? data.processing.map(o => `<div class="order">${String(o.display_id).padStart(2, '0')}</div>`).join('')
                     : '<div class="empty">Buyurtmalar yo\'q</div>';
 
+                // Update ready orders
                 document.getElementById('ready').innerHTML = data.finished.length
-                    ? data.finished.map(o => `<div class="order">${String(o.display_id).padStart(2, '0')}</div>`).join('')
+                    ? data.finished.map(o => {
+                        const isNew = !isFirstLoad && hasNewReady && notifiedOrders.has(o.id);
+                        return `<div class="order${isNew ? ' new' : ''}">${String(o.display_id).padStart(2, '0')}</div>`;
+                    }).join('')
                     : '<div class="empty">Buyurtmalar yo\'q</div>';
+
+                isFirstLoad = false;
+
             } catch (e) {
                 console.error(e);
             }
         }
+
+        // Enable audio on first user interaction (browser requirement)
+        document.getElementById('startOverlay').addEventListener('click', () => {
+            // Play and immediately pause to unlock audio
+            notificationSound.play().then(() => {
+                notificationSound.pause();
+                notificationSound.currentTime = 0;
+                // Hide overlay
+                document.getElementById('startOverlay').classList.add('hidden');
+            }).catch(e => {
+                console.log('Audio unlock failed:', e);
+                // Hide anyway
+                document.getElementById('startOverlay').classList.add('hidden');
+            });
+        });
 
         fetchOrders();
         setInterval(fetchOrders, 3000);
