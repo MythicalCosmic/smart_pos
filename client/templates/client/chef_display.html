@@ -21,7 +21,6 @@
             overflow-y: scroll;
         }
 
-        /* Start overlay */
         .start-overlay {
             position: fixed;
             top: 0;
@@ -72,7 +71,6 @@
             display: none;
         }
 
-        /* Header */
         .header {
             height: 80px;
             display: flex;
@@ -129,16 +127,13 @@
             font-size: 1rem;
         }
 
-        /* Container with horizontal scroll */
         .container {
-            /* height: calc(100vh - 80px); */
             padding: 20px;
             position: relative;
             overflow-x: auto;
             overflow-y: hidden;
         }
 
-        /* Custom scrollbar */
         .container::-webkit-scrollbar {
             height: 12px;
         }
@@ -171,18 +166,15 @@
             z-index: 0;
         }
 
-        /* Orders Grid - horizontal flex layout */
         .orders {
             display: flex;
             gap: 20px;
             min-width: min-content;
-            /* height: calc(100vh - 120px); */
             padding: 10px;
             position: relative;
             z-index: 1;
         }
 
-        /* Column wrapper for vertical stacking */
         .order-column {
             display: flex;
             flex-direction: column;
@@ -192,7 +184,6 @@
             flex-shrink: 0;
         }
 
-        /* Order Card */
         .order-card {
             background: #1A1D23;
             border-radius: 16px;
@@ -202,14 +193,16 @@
             width: 100%;
             display: flex;
             flex-direction: column;
-            /* max-height: calc(100vh - 200px); */
         }
 
         .order-card:hover {
             border-color: #FF7A00;
         }
 
-        /* Order Header */
+        .order-card.unpaid {
+            border-color: #ff4444;
+        }
+
         .order-header {
             background: linear-gradient(135deg, #FF7A00 0%, #ff9533 100%);
             color: #0F1115;
@@ -218,6 +211,10 @@
             justify-content: space-between;
             align-items: center;
             flex-shrink: 0;
+        }
+
+        .order-header.unpaid {
+            background: linear-gradient(135deg, #ff4444 0%, #ff6666 100%);
         }
 
         .order-number {
@@ -239,36 +236,53 @@
             display: inline-block;
         }
 
+        .payment-badge {
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 12px;
+            display: inline-block;
+            margin-top: 4px;
+        }
+
+        .payment-badge.paid {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .payment-badge.unpaid {
+            background: #ff4444;
+            color: white;
+        }
+
         .order-time {
             font-size: 0.7rem;
             opacity: 0.7;
             margin-top: 3px;
         }
 
-        /* Order Items - NOW WITH SCROLL */
         .order-items {
             padding: 12px 18px;
             overflow-y: auto;
             flex: 1;
             min-height: 0;
         }
-        
-        /* Custom scrollbar for order items */
+
         .order-items::-webkit-scrollbar {
             width: 8px;
         }
-        
+
         .order-items::-webkit-scrollbar-track {
             background: #0F1115;
             border-radius: 4px;
             margin: 4px;
         }
-        
+
         .order-items::-webkit-scrollbar-thumb {
             background: #FF7A00;
             border-radius: 4px;
         }
-        
+
         .order-items::-webkit-scrollbar-thumb:hover {
             background: #ff8c1a;
         }
@@ -304,7 +318,6 @@
             text-align: center;
         }
 
-        /* Ready Button */
         .btn-ready {
             width: 100%;
             padding: 16px;
@@ -337,7 +350,6 @@
             cursor: not-allowed;
         }
 
-        /* Empty State */
         .empty {
             text-align: center;
             color: #B0B0B0;
@@ -350,7 +362,7 @@
             top: 50%;
             transform: translate(-50%, -50%);
         }
-        
+
         #asd {
             font-size: 1.2rem;
             opacity: 0.7;
@@ -364,7 +376,6 @@
             opacity: 0.5;
         }
 
-        /* Responsive */
         @media (max-width: 1200px) {
             .order-column {
                 min-width: 320px;
@@ -404,7 +415,6 @@
     </style>
 </head>
 <body>
-    <!-- Start overlay -->
     <div class="start-overlay" id="startOverlay">
         <h1>👨‍🍳 Smart Food</h1>
         <p class="start-subtitle">Oshxona paneli</p>
@@ -430,15 +440,11 @@
     </div>
 
     <script>
-        // Track orders for new order detection
         const knownOrders = new Set();
         let isFirstLoad = true;
         let audioCtx = null;
-
-        // Number of columns to distribute orders across
         const COLUMNS = 4;
 
-        // Generate urgent alert sound - 3 quick beeps
         function playSound() {
             try {
                 if (!audioCtx) {
@@ -447,7 +453,6 @@
                 
                 const now = audioCtx.currentTime;
                 
-                // 3 urgent beeps - ascending
                 [0, 0.12, 0.24].forEach((delay, i) => {
                     const osc = audioCtx.createOscillator();
                     const gain = audioCtx.createGain();
@@ -455,7 +460,6 @@
                     osc.connect(gain);
                     gain.connect(audioCtx.destination);
                     
-                    // Ascending urgent tones
                     osc.frequency.setValueAtTime(600 + (i * 150), now + delay);
                     osc.type = 'square';
                     
@@ -471,7 +475,6 @@
             }
         }
 
-        // Unlock audio on start
         function unlockAudio() {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const osc = audioCtx.createOscillator();
@@ -483,7 +486,6 @@
             osc.stop(audioCtx.currentTime + 0.01);
         }
 
-        // Time
         function updateTime() {
             const now = new Date();
             document.getElementById('time').textContent = 
@@ -492,7 +494,6 @@
         setInterval(updateTime, 1000);
         updateTime();
 
-        // Format time ago
         function timeAgo(dateStr) {
             const now = new Date();
             const date = new Date(dateStr);
@@ -502,7 +503,6 @@
             return `${Math.floor(mins/60)} soat oldin`;
         }
 
-        // Mark ready
         async function markReady(orderId, btn) {
             btn.disabled = true;
             btn.innerHTML = '⏳ Kutib turing...';
@@ -566,12 +566,18 @@
                 </div>
             `).join('');
 
+            const unpaidClass = order.is_paid ? '' : 'unpaid';
+            const paymentBadge = order.is_paid 
+                ? '<span class="payment-badge paid">TO\'LANGAN</span>'
+                : '<span class="payment-badge unpaid">TO\'LANMAGAN</span>';
+
             return `
-                <div class="order-card" data-id="${order.id}">
-                    <div class="order-header">
+                <div class="order-card ${unpaidClass}" data-id="${order.id}">
+                    <div class="order-header ${unpaidClass}">
                         <span class="order-number">#${String(order.display_id).padStart(2, '0')}</span>
                         <div class="order-meta">
                             <span class="order-type">${orderTypeMap[order.order_type || 'HALL']}</span>
+                            ${paymentBadge}
                             <div id="asd" class="order-time">${timeAgo(order.created_at)}</div>
                         </div>
                     </div>
@@ -584,16 +590,13 @@
         }
 
         function distributeOrdersToColumns(orders) {
-            // Create columns dynamically based on number of orders
             const numColumns = Math.max(COLUMNS, Math.ceil(orders.length / 3));
             const columns = Array.from({ length: numColumns }, () => []);
             
-            // Distribute orders to columns in a round-robin fashion
             orders.forEach((order, index) => {
                 columns[index % numColumns].push(order);
             });
             
-            // Generate HTML for columns
             return columns
                 .filter(col => col.length > 0)
                 .map(column => `
@@ -612,7 +615,6 @@
                 const currentIds = new Set();
                 const newOrderIds = new Set();
 
-                // Check for new orders
                 data.orders.forEach(order => {
                     currentIds.add(order.id);
                     if (!knownOrders.has(order.id) && !isFirstLoad) {
@@ -621,21 +623,17 @@
                     }
                 });
 
-                // Play sound for new orders
                 if (hasNewOrder) {
                     playSound();
                 }
 
-                // Only update DOM if orders changed
                 const ordersChanged = data.orders.length !== knownOrders.size || 
                     data.orders.some(o => !knownOrders.has(o.id));
 
                 if (ordersChanged || isFirstLoad) {
-                    // Update known orders
                     knownOrders.clear();
                     data.orders.forEach(o => knownOrders.add(o.id));
 
-                    // Render
                     if (data.orders.length > 0) {
                         document.getElementById('orders').innerHTML = distributeOrdersToColumns(data.orders);
                     } else {
@@ -657,10 +655,9 @@
             }
         }
 
-        // Start overlay
         document.getElementById('startOverlay').addEventListener('click', () => {
             unlockAudio();
-            playSound(); // Play once so they know it works
+            playSound();
             document.getElementById('startOverlay').classList.add('hidden');
         });
 

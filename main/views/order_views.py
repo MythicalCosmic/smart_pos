@@ -12,6 +12,7 @@ from rest_framework.decorators import api_view
 def list_orders(request):
     page = int(request.GET.get('page', 1))
     per_page = int(request.GET.get('per_page', 20))
+    payment_status = request.GET.get('payment_status')
     status = request.GET.get('status')
     user_id = request.GET.get('user_id')
     cashier_id = request.GET.get('cashier_id')
@@ -20,6 +21,7 @@ def list_orders(request):
     result = OrderService.get_all_orders(
         page=page,
         per_page=per_page,
+        payment_status=payment_status,
         status=status,
         user_id=user_id,
         cashier_id=cashier_id,
@@ -49,13 +51,8 @@ def create_order(request):
     if error:
         return error
     
-    # Get authenticated user from request
     user = request.user
-    
-    # Use authenticated user's ID as customer
     user_id = user.id
-    
-    # If user is a cashier, they are the cashier. Otherwise no cashier assigned yet
     cashier_id = user.id if user.role == 'CASHIER' else None
     
     items = data.get('items', [])
@@ -69,14 +66,12 @@ def create_order(request):
             message='Order must contain items'
         )
     
-    # Validate order type
     if order_type not in ['HALL', 'DELIVERY', 'PICKUP']:
         return APIResponse.validation_error(
             errors={'order_type': 'Must be HALL, DELIVERY, or PICKUP'},
             message='Invalid order type'
         )
     
-    # Validate DELIVERY requirements
     if order_type == 'DELIVERY':
         if not phone_number:
             return APIResponse.validation_error(
@@ -205,33 +200,10 @@ def update_status(request, order_id):
             message='Missing status field'
         )
     
-    # Get authenticated user's ID as cashier if they're a cashier
     user = request.user
     cashier_id = user.id if user.role == 'CASHIER' else None
     
     result = OrderService.update_order_status(order_id, status, cashier_id)
-    
-    if result['success']:
-        return APIResponse.success(message=result['message'])
-    
-    return APIResponse.error(message=result['message'])
-
-
-@csrf_exempt
-@api_view(["POST"])
-@user_required
-def pay_order(request, order_id):
-    """Mark order as paid - automatically uses authenticated cashier"""
-    user = request.user
-    
-    # Only cashiers can mark orders as paid
-    if user.role != 'CASHIER':
-        return APIResponse.error(
-            message='Only cashiers can process payments',
-            status_code=403
-        )
-    
-    result = OrderService.mark_as_paid(order_id, user.id)
     
     if result['success']:
         return APIResponse.success(
@@ -245,8 +217,24 @@ def pay_order(request, order_id):
 @csrf_exempt
 @api_view(["POST"])
 @user_required
+def pay_order(request, order_id):
+    user = request.user
+    
+    result = OrderService.mark_as_paid(order_id, user.id)
+    
+    if result['success']:
+        return APIResponse.success(
+            data={'is_paid': result.get('is_paid')},
+            message=result['message']
+        )
+    
+    return APIResponse.error(message=result['message'])
+
+
+@csrf_exempt
+@api_view(["POST"])
+@user_required
 def mark_ready(request, order_id):
-    """Chef marks order as ready/finished"""
     result = OrderService.mark_order_ready(order_id)
     
     if result['success']:
@@ -262,11 +250,10 @@ def mark_ready(request, order_id):
 @api_view(["POST"])
 @user_required
 def cancel_order(request, order_id):
-    """Cancel order"""
-    result = OrderService.update_order_status(order_id, 'CANCELED')
+    result = OrderService.update_order_status(order_id, 'CANCELLED')
     
     if result['success']:
-        return APIResponse.success(message='Order canceled successfully')
+        return APIResponse.success(message='Order cancelled successfully')
     
     return APIResponse.error(message=result['message'])
 
@@ -274,12 +261,6 @@ def cancel_order(request, order_id):
 @csrf_exempt
 @api_view(["GET"])
 def client_display(request):
-    """
-    Public endpoint for CLIENT display screen
-    Shows:
-    - Processing: OPEN or PAID orders (not ready yet)
-    - Finished: READY orders from last 5 minutes
-    """
     result = OrderService.get_client_display_orders()
     return APIResponse.success(data=result)
 
@@ -287,10 +268,6 @@ def client_display(request):
 @csrf_exempt
 @api_view(["GET"])
 def chef_display(request):
-    """
-    Public endpoint for CHEF display screen
-    Shows only PAID orders that need to be prepared
-    """
     result = OrderService.get_chef_display_orders()
     return APIResponse.success(data=result)
 

@@ -12,6 +12,8 @@ from .inkassa_service import InkassaService
 
 class OrderService:
     
+    ALLOWED_STATUSES = ['PREPARING', 'READY', 'CANCELLED']
+    
     @staticmethod
     def _get_next_display_id():
         last_order = Order.objects.aggregate(max_id=Max('display_id'))
@@ -22,12 +24,21 @@ class OrderService:
         return max_id + 1
     
     @staticmethod
-    def get_all_orders(page=1, per_page=20, status=None, user_id=None, cashier_id=None, order_by='-created_at'):
+    def get_all_orders(page=1, per_page=20, status=None, payment_status=None, user_id=None, cashier_id=None, order_by='-created_at'):
         
         queryset = Order.objects.select_related('user', 'cashier').prefetch_related('items__product').all()
         
+        if payment_status:
+            payment_status = payment_status.strip().upper()
+            if payment_status == 'PAID':
+                queryset = queryset.filter(is_paid=True)
+            elif payment_status == 'UNPAID':
+                queryset = queryset.filter(is_paid=False)
+
         if status:
-            queryset = queryset.filter(status=status)
+            status = status.strip().upper()
+            if status in OrderService.ALLOWED_STATUSES:
+                queryset = queryset.filter(status=status)
         
         if user_id:
             queryset = queryset.filter(user_id=user_id)
@@ -58,6 +69,7 @@ class OrderService:
                     'name': f"{order.cashier.first_name} {order.cashier.last_name}"
                 } if order.cashier else None,
                 'status': order.status,
+                'is_paid': order.is_paid,
                 'total_amount': str(order.total_amount),
                 'items_count': order.items.count(),
                 'created_at': order.created_at.isoformat(),
@@ -114,6 +126,8 @@ class OrderService:
                         'name': f"{order.cashier.first_name} {order.cashier.last_name}"
                     } if order.cashier else None,
                     'status': order.status,
+                    'is_paid': order.is_paid,
+                    'paid_at': order.paid_at.isoformat() if order.paid_at else None,
                     'total_amount': str(order.total_amount),
                     'items': items,
                     'created_at': order.created_at.isoformat(),
@@ -142,7 +156,6 @@ class OrderService:
             if order_type not in ['HALL', 'DELIVERY', 'PICKUP']:
                 return {'success': False, 'message': 'Invalid order type. Must be HALL, DELIVERY, or PICKUP'}
 
-
             display_id = OrderService._get_next_display_id()
             
             order = Order.objects.create(
@@ -152,7 +165,8 @@ class OrderService:
                 order_type=order_type,
                 phone_number=phone_number,
                 description=description,
-                status='OPEN',
+                status='PREPARING',
+                is_paid=False,
                 total_amount=0
             )
             
@@ -198,8 +212,8 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
             
-            if order.status not in ['OPEN', 'PAID']:
-                return {'success': False, 'message': 'Cannot modify a closed or ready order'}
+            if order.status != 'PREPARING':
+                return {'success': False, 'message': 'Cannot modify order that is not in PREPARING status'}
             
             product = Product.objects.get(id=product_id)
             
@@ -232,8 +246,8 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
             
-            if order.status not in ['OPEN', 'PAID']:
-                return {'success': False, 'message': 'Cannot modify a closed or ready order'}
+            if order.status != 'PREPARING':
+                return {'success': False, 'message': 'Cannot modify order that is not in PREPARING status'}
             
             item = OrderItem.objects.get(id=item_id, order=order)
             
@@ -259,8 +273,8 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
             
-            if order.status not in ['OPEN', 'PAID']:
-                return {'success': False, 'message': 'Cannot modify a closed or ready order'}
+            if order.status != 'PREPARING':
+                return {'success': False, 'message': 'Cannot modify order that is not in PREPARING status'}
             
             item = OrderItem.objects.get(id=item_id, order=order)
             item.delete()
@@ -284,32 +298,36 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
 
-            ALLOWED_STATUSES = [
-                'OPEN',
-                'PAID',
-                'PREPARING',
-                'READY',
-                'COMPLETED',
-                'CANCELED'
-            ]
-
-            if status not in ALLOWED_STATUSES:
+            if status not in OrderService.ALLOWED_STATUSES:
                 return {
                     'success': False,
-                    'message': f'Invalid status. Allowed: {", ".join(ALLOWED_STATUSES)}'
+                    'message': f'Invalid status. Allowed: {", ".join(OrderService.ALLOWED_STATUSES)}'
                 }
 
+            if order.status == 'CANCELLED':
+                return {'success': False, 'message': 'Cannot update cancelled order'}
+
             order.status = status
+
+            if status == 'READY':
+                order.ready_at = timezone.now()
 
             if cashier_id is not None:
                 order.cashier_id = cashier_id
 
-            order.save(update_fields=['status', 'cashier_id'] if cashier_id else ['status'])
+            update_fields = ['status']
+            if status == 'READY':
+                update_fields.append('ready_at')
+            if cashier_id is not None:
+                update_fields.append('cashier_id')
+
+            order.save(update_fields=update_fields)
 
             return {
                 'success': True,
                 'message': f'Order status updated to {status}',
-                'order_id': order.id
+                'order_id': order.id,
+                'status': status
             }
 
         except Order.DoesNotExist:
@@ -321,48 +339,48 @@ class OrderService:
                 'message': f'Failed to update status: {str(e)}'
             }
 
-    
     @staticmethod
-    def mark_as_paid(order_id, cashier_id):
+    @transaction.atomic
+    def mark_as_paid(order_id, admin_id):
         try:
             order = Order.objects.get(id=order_id)
-            
-            if order.status == 'CANCELED':
-                return {'success': False, 'message': 'Cannot mark canceled order as paid'}
-            
-            if order.is_paid:
-                return {'success': False, 'message': 'Order is already paid'}
 
-            if not User.objects.filter(id=cashier_id).exists():
-                return {'success': False, 'message': 'Invalid cashier'}
-            
-            order.cashier_id = cashier_id
+            if order.status == 'CANCELLED':
+                return {'success': False, 'message': 'Cancelled order cannot be paid'}
+
+            if order.is_paid:
+                return {'success': False, 'message': 'Order already paid'}
+
             order.is_paid = True
             order.paid_at = timezone.now()
-            order.update_status()  
+            order.cashier_id = admin_id
+            order.save(update_fields=['is_paid', 'paid_at', 'cashier_id'])
 
             InkassaService.add_to_register(order.total_amount)
-            
-            return {'success': True, 'message': 'Order marked as paid', 'status': order.status}
+
+            return {
+                'success': True,
+                'message': 'Order marked as paid',
+                'is_paid': True
+            }
+
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
-        except Exception as e:
-            return {'success': False, 'message': f'Failed to mark as paid: {str(e)}'}
-    
+
     @staticmethod
     def mark_order_ready(order_id):
         try:
             order = Order.objects.get(id=order_id)
             
-            if order.status == 'CANCELED':
-                return {'success': False, 'message': 'Cannot mark canceled order as ready'}
+            if order.status == 'CANCELLED':
+                return {'success': False, 'message': 'Cannot mark cancelled order as ready'}
             
-            if order.is_ready:
-                return {'success': False, 'message': 'Order is already marked as ready'}
+            if order.status == 'READY':
+                return {'success': False, 'message': 'Order is already ready'}
             
-            order.is_ready = True
+            order.status = 'READY'
             order.ready_at = timezone.now()
-            order.update_status()
+            order.save(update_fields=['status', 'ready_at'])
             
             return {'success': True, 'message': 'Order marked as ready', 'status': order.status}
         except Order.DoesNotExist:
@@ -375,7 +393,7 @@ class OrderService:
         five_minutes_ago = timezone.now() - timedelta(minutes=5)
 
         processing = Order.objects.filter(
-            status__in=['OPEN', 'PAID']
+            status='PREPARING'
         ).select_related('user').order_by('created_at')
 
         finished = Order.objects.filter(
@@ -391,6 +409,7 @@ class OrderService:
                 'user': f"{order.user.first_name} {order.user.last_name}",
                 'total_amount': str(order.total_amount),
                 'status': order.status,
+                'is_paid': order.is_paid,
                 'created_at': order.created_at.isoformat()
             })
         
@@ -401,6 +420,7 @@ class OrderService:
                 'display_id': order.display_id,
                 'user': f"{order.user.first_name} {order.user.last_name}",
                 'total_amount': str(order.total_amount),
+                'is_paid': order.is_paid,
                 'completed_at': order.ready_at.isoformat()
             })
         
@@ -415,7 +435,7 @@ class OrderService:
     @staticmethod
     def get_chef_display_orders():
         orders = Order.objects.filter(
-            status='PAID'
+            status='PREPARING'
         ).select_related('user').prefetch_related('items__product').order_by('created_at')
         
         orders_list = []
@@ -432,6 +452,7 @@ class OrderService:
                 'display_id': order.display_id,
                 'user': f"{order.user.first_name} {order.user.last_name}",
                 'total_amount': str(order.total_amount),
+                'is_paid': order.is_paid,
                 'items': items,
                 'created_at': order.created_at.isoformat()
             })
@@ -445,14 +466,14 @@ class OrderService:
     
     @staticmethod
     def get_order_stats():
-        
         total = Order.objects.count()
-        open_orders = Order.objects.filter(status='OPEN').count()
-        paid_orders = Order.objects.filter(status='PAID').count()
+        preparing_orders = Order.objects.filter(status='PREPARING').count()
         ready_orders = Order.objects.filter(status='READY').count()
-        canceled_orders = Order.objects.filter(status='CANCELED').count()
+        cancelled_orders = Order.objects.filter(status='CANCELLED').count()
+        paid_orders = Order.objects.filter(is_paid=True).count()
+        unpaid_orders = Order.objects.filter(is_paid=False).count()
         
-        total_revenue = Order.objects.filter(status__in=['PAID', 'READY']).aggregate(
+        total_revenue = Order.objects.filter(is_paid=True).aggregate(
             total=Sum('total_amount')
         )['total'] or Decimal('0.00')
         
@@ -460,10 +481,11 @@ class OrderService:
             'success': True,
             'stats': {
                 'total_orders': total,
-                'open_orders': open_orders,
-                'paid_orders': paid_orders,
+                'preparing_orders': preparing_orders,
                 'ready_orders': ready_orders,
-                'canceled_orders': canceled_orders,
+                'cancelled_orders': cancelled_orders,
+                'paid_orders': paid_orders,
+                'unpaid_orders': unpaid_orders,
                 'total_revenue': str(total_revenue)
             }
         }

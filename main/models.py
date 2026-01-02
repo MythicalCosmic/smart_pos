@@ -122,7 +122,6 @@ class Order(models.Model):
     )
 
     is_paid = models.BooleanField(default=False)
-    is_ready = models.BooleanField(default=False)
 
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -133,17 +132,6 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order #{self.display_id} - {self.order_type} - {self.status}"
-    
-    def update_status(self):
-        if self.is_ready and self.is_paid:
-            self.status = 'COMPLETED'
-        elif self.is_ready:
-            self.status = 'READY'
-        elif self.is_paid:
-            self.status = 'PREPARING'
-        else:
-            self.status = 'OPEN'
-        self.save()
 
 
 class OrderItem(models.Model):
