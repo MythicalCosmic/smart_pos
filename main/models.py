@@ -145,6 +145,7 @@ class OrderItem(models.Model):
         on_delete=models.CASCADE
     )
     quantity = models.PositiveIntegerField()
+    detail = models.TextField(null=True, blank=True)
     price = models.DecimalField(
         max_digits=10,
         decimal_places=2

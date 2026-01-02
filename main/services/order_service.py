@@ -142,7 +142,7 @@ class OrderService:
     
     @staticmethod
     @transaction.atomic
-    def create_order(user_id, items, order_type='HALL', phone_number=None, description=None, cashier_id=None):
+    def create_order(user_id, items, order_type='HALL', phone_number=None, description=None, cashier_id=None, detail=None):
         try:
             if not User.objects.filter(id=user_id).exists():
                 return {'success': False, 'message': 'User not found'}
@@ -174,6 +174,7 @@ class OrderService:
             
             for item_data in items:
                 product_id = item_data.get('product_id')
+                detail = item_data.get('detail') if 'detail' in item_data else None
                 quantity = item_data.get('quantity', 1)
                 
                 if quantity <= 0:
@@ -187,6 +188,7 @@ class OrderService:
                 OrderItem.objects.create(
                     order=order,
                     product=product,
+                    detail=detail,
                     quantity=quantity,
                     price=product.price
                 )

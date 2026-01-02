@@ -59,6 +59,9 @@ def create_order(request):
     order_type = data.get('order_type', 'HALL')
     phone_number = data.get('phone_number')
     description = data.get('description')
+    details = [item.get('detail') for item in items if 'detail' in item]
+
+
     
     if not items or len(items) == 0:
         return APIResponse.validation_error(
@@ -102,6 +105,7 @@ def create_order(request):
         order_type=order_type,
         phone_number=phone_number,
         description=description,
+        detail=[details[idx] for idx in range(len(details))] if details else None,
         cashier_id=cashier_id
     )
     
