@@ -180,11 +180,6 @@ def dashboard_callback(request, context):
         'cashier_performance': cashier_performance,
     })
     
-    # Debug: Print chart data
-    print("=== DASHBOARD DEBUG ===")
-    print(f"Revenue chart data type: {type(revenue_chart_data)}")
-    print(f"Revenue chart JSON: {json.dumps(revenue_chart_data)[:200]}")
-    print("=====================")
     
     return context
 

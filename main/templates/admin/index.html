@@ -6,8 +6,19 @@
         {# Period Filter #}
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-            {% component "unfold/components/navigation.html" with class="ml-auto" items=filters %}
-            {% endcomponent %}
+            <div class="flex gap-2">
+                {% for filter in filters %}
+                    <a href="{{ filter.link }}" 
+                       style="padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; display: inline-block;
+                              {% if filter.active %}
+                                  background-color: #6366f1; color: white;
+                              {% else %}
+                                  background-color: #374151; color: #d1d5db;
+                              {% endif %}">
+                        {{ filter.label }}
+                    </a>
+                {% endfor %}
+            </div>
         </div>
 
         {# KPI Cards #}
@@ -232,7 +243,6 @@
                 console.error('Revenue chart canvas not found');
             }
 
-            // Orders Chart
             const ordersCtx = document.getElementById('ordersChart');
             if (ordersCtx) {
                 try {
