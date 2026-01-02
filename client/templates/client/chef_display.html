@@ -18,7 +18,7 @@
             background: #0F1115;
             color: #FFFFFF;
             height: 100vh;
-            overflow: hidden;
+            overflow-y: scroll;
         }
 
         /* Start overlay */
@@ -129,16 +129,36 @@
             font-size: 1rem;
         }
 
-        /* Container */
+        /* Container with horizontal scroll */
         .container {
-            height: calc(100vh - 80px);
+            /* height: calc(100vh - 80px); */
             padding: 20px;
             position: relative;
-            overflow: hidden;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        /* Custom scrollbar */
+        .container::-webkit-scrollbar {
+            height: 12px;
+        }
+
+        .container::-webkit-scrollbar-track {
+            background: #1A1D23;
+            border-radius: 10px;
+        }
+
+        .container::-webkit-scrollbar-thumb {
+            background: #FF7A00;
+            border-radius: 10px;
+        }
+
+        .container::-webkit-scrollbar-thumb:hover {
+            background: #ff8c1a;
         }
 
         .panel-bg {
-            position: absolute;
+            position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
@@ -148,29 +168,41 @@
             border-radius: 50%;
             opacity: 0.02;
             pointer-events: none;
+            z-index: 0;
         }
 
-        /* Orders Grid - masonry columns, no scroll */
+        /* Orders Grid - horizontal flex layout */
         .orders {
-            column-count: 4;
-            column-gap: 20px;
-            height: calc(100vh - 120px);
+            display: flex;
+            gap: 20px;
+            min-width: min-content;
+            /* height: calc(100vh - 120px); */
             padding: 10px;
             position: relative;
             z-index: 1;
         }
 
-        /* Order Card - auto height, no break inside */
+        /* Column wrapper for vertical stacking */
+        .order-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-width: 350px;
+            max-width: 350px;
+            flex-shrink: 0;
+        }
+
+        /* Order Card */
         .order-card {
             background: #1A1D23;
             border-radius: 16px;
             border: 3px solid #2a2d33;
             overflow: hidden;
             transition: border-color 0.2s ease;
-            display: inline-block;
             width: 100%;
-            margin-bottom: 20px;
-            break-inside: avoid;
+            display: flex;
+            flex-direction: column;
+            /* max-height: calc(100vh - 200px); */
         }
 
         .order-card:hover {
@@ -185,6 +217,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
         }
 
         .order-number {
@@ -212,9 +245,32 @@
             margin-top: 3px;
         }
 
-        /* Order Items - auto height */
+        /* Order Items - NOW WITH SCROLL */
         .order-items {
             padding: 12px 18px;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+        }
+        
+        /* Custom scrollbar for order items */
+        .order-items::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .order-items::-webkit-scrollbar-track {
+            background: #0F1115;
+            border-radius: 4px;
+            margin: 4px;
+        }
+        
+        .order-items::-webkit-scrollbar-thumb {
+            background: #FF7A00;
+            border-radius: 4px;
+        }
+        
+        .order-items::-webkit-scrollbar-thumb:hover {
+            background: #ff8c1a;
         }
 
         .item {
@@ -265,6 +321,7 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
+            flex-shrink: 0;
         }
 
         .btn-ready:hover {
@@ -288,6 +345,17 @@
             opacity: 0.4;
             padding: 100px;
             width: 100%;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        #asd {
+            font-size: 1.2rem;
+            opacity: 0.7;
+            font-weight: bold;
+            margin-top: 3px;
         }
 
         .empty-icon {
@@ -298,20 +366,23 @@
 
         /* Responsive */
         @media (max-width: 1200px) {
-            .orders {
-                column-count: 3;
+            .order-column {
+                min-width: 320px;
+                max-width: 320px;
             }
         }
 
         @media (max-width: 900px) {
-            .orders {
-                column-count: 2;
+            .order-column {
+                min-width: 300px;
+                max-width: 300px;
             }
         }
 
         @media (min-width: 1920px) {
-            .orders {
-                column-count: 5;
+            .order-column {
+                min-width: 400px;
+                max-width: 400px;
             }
             .order-number {
                 font-size: 2.8rem;
@@ -325,8 +396,9 @@
         }
 
         @media (min-width: 2560px) {
-            .orders {
-                column-count: 6;
+            .order-column {
+                min-width: 450px;
+                max-width: 450px;
             }
         }
     </style>
@@ -362,6 +434,9 @@
         const knownOrders = new Set();
         let isFirstLoad = true;
         let audioCtx = null;
+
+        // Number of columns to distribute orders across
+        const COLUMNS = 4;
 
         // Generate urgent alert sound - 3 quick beeps
         function playSound() {
@@ -426,13 +501,6 @@
             if (mins < 60) return `${mins} daq oldin`;
             return `${Math.floor(mins/60)} soat oldin`;
         }
-        const orderTypeMap = {
-        HALL: "Zalda",
-        PICKUP: "Olib ketish",
-        DELIVERY: "Yetkazib berish"
-    };
-
-
 
         // Mark ready
         async function markReady(orderId, btn) {
@@ -483,6 +551,12 @@
             const count = document.querySelectorAll('.order-card').length;
             document.getElementById('orderCount').textContent = count;
         }
+        
+        const orderTypeMap = {
+            HALL: "Zalda",
+            PICKUP: "Olib ketish",
+            DELIVERY: "Yetkazib berish"
+        };
 
         function createOrderCard(order) {
             const items = order.items.map(item => `
@@ -497,8 +571,8 @@
                     <div class="order-header">
                         <span class="order-number">#${String(order.display_id).padStart(2, '0')}</span>
                         <div class="order-meta">
-                            <span class="order-type">${orderTypeMap[order.order_type] || "Zalda"}</span>
-                            <div class="order-time">${timeAgo(order.created_at)}</div>
+                            <span class="order-type">${orderTypeMap[order.order_type || 'HALL']}</span>
+                            <div id="asd" class="order-time">${timeAgo(order.created_at)}</div>
                         </div>
                     </div>
                     <div class="order-items">
@@ -507,6 +581,26 @@
                     <button class="btn-ready" onclick="markReady(${order.id}, this)">✓ Tayyor</button>
                 </div>
             `;
+        }
+
+        function distributeOrdersToColumns(orders) {
+            // Create columns dynamically based on number of orders
+            const numColumns = Math.max(COLUMNS, Math.ceil(orders.length / 3));
+            const columns = Array.from({ length: numColumns }, () => []);
+            
+            // Distribute orders to columns in a round-robin fashion
+            orders.forEach((order, index) => {
+                columns[index % numColumns].push(order);
+            });
+            
+            // Generate HTML for columns
+            return columns
+                .filter(col => col.length > 0)
+                .map(column => `
+                    <div class="order-column">
+                        ${column.map(order => createOrderCard(order)).join('')}
+                    </div>
+                `).join('');
         }
 
         async function fetchOrders() {
@@ -543,9 +637,7 @@
 
                     // Render
                     if (data.orders.length > 0) {
-                        document.getElementById('orders').innerHTML = data.orders
-                            .map(o => createOrderCard(o))
-                            .join('');
+                        document.getElementById('orders').innerHTML = distributeOrdersToColumns(data.orders);
                     } else {
                         document.getElementById('orders').innerHTML = `
                             <div class="empty">

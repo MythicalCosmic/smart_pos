@@ -3,6 +3,8 @@ from django.db.models import Sum, Count, Avg, Q
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
+from django import forms
+from django.contrib.auth.hashers import make_password
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import display
 from unfold.contrib.filters.admin import (
@@ -17,7 +19,6 @@ from datetime import datetime, timedelta
 from django.utils import timezone
 
 
-# Inline for OrderItems
 class OrderItemInline(TabularInline):
     model = OrderItem
     extra = 0
@@ -31,9 +32,67 @@ class OrderItemInline(TabularInline):
         return "-"
 
 
-# User Admin
+class UserAdminForm(forms.ModelForm):
+    """Custom form for User model with password handling"""
+    password = forms.CharField(
+        label=_("Password"),
+        widget=forms.PasswordInput(attrs={
+            'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500',
+            'placeholder': 'Enter password',
+        }),
+        help_text=_("Enter a strong password. It will be securely hashed."),
+        required=False,
+    )
+    
+    class Meta:
+        model = User
+        fields = '__all__'
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # If editing existing user, make password optional
+        if self.instance and self.instance.pk:
+            self.fields['password'].required = False
+            self.fields['password'].help_text = _(
+                "Leave blank to keep the current password. Enter a new password to change it."
+            )
+            self.fields['password'].widget.attrs['placeholder'] = 'Leave blank to keep current password'
+        else:
+            # For new user, password is required
+            self.fields['password'].required = True
+            self.fields['password'].help_text = _("Enter a strong password for the new user.")
+    
+    def clean_password(self):
+        """Clean and validate password"""
+        password = self.cleaned_data.get('password')
+        
+        # If editing and password is empty, return None (don't change password)
+        if self.instance.pk and not password:
+            return None
+        
+        # Validate password length
+        if password and len(password) < 4:
+            raise forms.ValidationError(_("Password must be at least 4 characters long."))
+        
+        return password
+    
+    def save(self, commit=True):
+        """Override save to hash password"""
+        user = super().save(commit=False)
+        
+        # Hash password if provided
+        password = self.cleaned_data.get('password')
+        if password:
+            user.password = make_password(password)
+        
+        if commit:
+            user.save()
+        return user
+
+
 @admin.register(User)
 class UserAdmin(ModelAdmin):
+    form = UserAdminForm
     list_display = ['id', 'full_name', 'email', 'role_badge', 'status_badge', 'last_login_at']
     list_filter = [
         'role',
@@ -46,13 +105,17 @@ class UserAdmin(ModelAdmin):
     
     fieldsets = (
         (_('Personal Information'), {
-            'fields': ('first_name', 'last_name', 'email')
+            'fields': ('first_name', 'last_name', 'email'),
+            'classes': ['tab'],
         }),
-        (_('Access & Status'), {
-            'fields': ('role', 'status', 'password')
+        (_('Access & Security'), {
+            'fields': ('role', 'status', 'password'),
+            'classes': ['tab'],
+            'description': _('Set user role, status, and password. Password will be securely hashed.')
         }),
-        (_('Activity'), {
-            'fields': ('last_login_at', 'last_login_api')
+        (_('Activity Tracking'), {
+            'fields': ('last_login_at', 'last_login_api'),
+            'classes': ['tab'],
         }),
     )
     
@@ -76,7 +139,6 @@ class UserAdmin(ModelAdmin):
         return 'danger', obj.get_status_display()
 
 
-# Session Admin
 @admin.register(Session)
 class SessionAdmin(ModelAdmin):
     list_display = ['id', 'user_link', 'ip_address', 'user_agent', 'last_activity']
@@ -95,7 +157,6 @@ class SessionAdmin(ModelAdmin):
         return "-"
 
 
-# Category Admin
 @admin.register(Category)
 class CategoryAdmin(ModelAdmin):
     list_display = ['id', 'name', 'slug', 'status_badge', 'sort_order', 'product_count', 'created_at']
@@ -127,7 +188,6 @@ class CategoryAdmin(ModelAdmin):
         return obj.products.count()
 
 
-# Product Admin
 @admin.register(Product)
 class ProductAdmin(ModelAdmin):
     list_display = ['id', 'name', 'category_link', 'price_display', 'times_ordered', 'created_at']
@@ -165,7 +225,6 @@ class ProductAdmin(ModelAdmin):
         )['total'] or 0
 
 
-# Order Admin
 @admin.register(Order)
 class OrderAdmin(ModelAdmin):
     list_display = ['display_id', 'user_link', 'cashier_link', 'status_badge', 
@@ -229,14 +288,12 @@ class OrderAdmin(ModelAdmin):
         return obj.items.count()
 
 
-# Cash Register Admin
 @admin.register(CashRegister)
 class CashRegisterAdmin(ModelAdmin):
     list_display = ['id', 'current_balance_display', 'last_updated']
     readonly_fields = ['current_balance', 'last_updated']
     
     def has_add_permission(self, request):
-        # Only allow one cash register
         return not CashRegister.objects.exists()
     
     def has_delete_permission(self, request, obj=None):
@@ -247,7 +304,6 @@ class CashRegisterAdmin(ModelAdmin):
         return f"${obj.current_balance:.2f}"
 
 
-# Inkassa Admin
 @admin.register(Inkassa)
 class InkassaAdmin(ModelAdmin):
     list_display = ['id', 'cashier_link', 'amount_display', 'balance_before_display', 

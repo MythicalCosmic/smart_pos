@@ -30,6 +30,12 @@ class User(models.Model):
     last_login_at = models.DateTimeField(null=True, blank=True)
     last_login_api = models.CharField(max_length=20, null=True, blank=True)
 
+
+    def save_model(self, request, obj, form, change):
+        if form.cleaned_data.get('password'):
+            obj.set_password(form.cleaned_data['password']) 
+        super().save_model(request, obj, form, change)
+
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 
@@ -51,7 +57,7 @@ class Category(models.Model):
         default='ACTIVE'
     )
     slug = models.SlugField(unique=True)
-    description = models.TextField()
+    description = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -66,7 +72,7 @@ class Product(models.Model):
         related_name="products"
     )
     name = models.CharField(max_length=100)
-    description = models.TextField()
+    description = models.TextField(null=True, blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -77,11 +83,11 @@ class Product(models.Model):
 
 class Order(models.Model):
     class Status(models.TextChoices):
-        OPEN = "OPEN", "Open"                      # Cashier is creating the order
-        PREPARING = "PREPARING", "Preparing"       # Sent to kitchen, being prepared
-        READY = "READY", "Ready"                   # Food is ready (may or may not be paid)
-        COMPLETED = "COMPLETED", "Completed"       # Both ready AND paid
-        CANCELED = "CANCELED", "Canceled"          # Order was canceled
+        OPEN = "OPEN", "Open"                     
+        PREPARING = "PREPARING", "Preparing"       
+        READY = "READY", "Ready"                   
+        COMPLETED = "COMPLETED", "Completed" 
+        CANCELED = "CANCELED", "Canceled"         
 
     class OrderType(models.TextChoices):
         HALL = "HALL", "Hall (Dine-in)"
@@ -121,17 +127,14 @@ class Order(models.Model):
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
-    # Track when order was marked as ready
+
     ready_at = models.DateTimeField(null=True, blank=True)
-    # Track when order was paid
     paid_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Order #{self.display_id} - {self.order_type} - {self.status}"
     
     def update_status(self):
-        """Automatically update status based on is_paid and is_ready flags"""
         if self.is_ready and self.is_paid:
             self.status = 'COMPLETED'
         elif self.is_ready:

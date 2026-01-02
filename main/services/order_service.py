@@ -286,6 +286,7 @@ class OrderService:
 
             ALLOWED_STATUSES = [
                 'OPEN',
+                'PAID',
                 'PREPARING',
                 'READY',
                 'COMPLETED',
