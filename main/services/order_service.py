@@ -8,6 +8,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.db.models.functions import Coalesce
 from .inkassa_service import InkassaService
+from django.db import transaction
 
 
 class OrderService:
@@ -15,13 +16,21 @@ class OrderService:
     ALLOWED_STATUSES = ['PREPARING', 'READY', 'CANCELLED']
     
     @staticmethod
+    @transaction.atomic
     def _get_next_display_id():
-        last_order = Order.objects.aggregate(max_id=Max('display_id'))
-        max_id = last_order['max_id']
-        
-        if max_id is None or max_id >= 100:
+        last = (
+            Order.objects
+            .select_for_update()
+            .order_by('-id')
+            .only('display_id')
+            .first()
+        )
+
+        if not last or not last.display_id:
             return 1
-        return max_id + 1
+
+        return (last.display_id % 100) + 1
+
     
     @staticmethod
     def get_all_orders(page=1, per_page=20, status=None, payment_status=None, user_id=None, cashier_id=None, order_by='-created_at'):

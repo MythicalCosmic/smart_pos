@@ -6,8 +6,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Food - Oshxona</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-primary: #1e1e1e;
+            --bg-header: #151515;
+            --text-primary: #ffffff;
+            --text-muted: #888888;
+            --card-color: #e74c3c;
+            --success: #27ae60;
+            --border-color: #333;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -16,19 +26,20 @@
 
         body {
             font-family: 'Inter', sans-serif;
-            background: #0F1115;
-            color: #FFFFFF;
-            height: 100vh;
-            overflow-y: scroll;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
         }
 
+        /* Start Overlay */
         .start-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(15, 17, 21, 0.98);
+            background: var(--bg-primary);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -37,266 +48,237 @@
             cursor: pointer;
         }
 
+        .start-overlay .logo-icon {
+            width: 120px;
+            height: 120px;
+            background: var(--card-color);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            margin-bottom: 30px;
+        }
+
         .start-overlay h1 {
-            font-size: 3rem;
-            color: #FF7A00;
-            margin-bottom: 10px;
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 8px;
         }
 
         .start-overlay .start-subtitle {
-            font-size: 1.2rem;
-            color: #B0B0B0;
+            font-size: 1.1rem;
+            color: var(--text-muted);
             margin-bottom: 40px;
         }
 
         .start-btn {
-            padding: 20px 60px;
-            font-size: 1.5rem;
+            padding: 18px 50px;
+            font-size: 1.1rem;
             font-weight: 700;
-            background: #FF7A00;
-            color: #0F1115;
+            background: var(--card-color);
+            color: white;
             border: none;
             border-radius: 12px;
             cursor: pointer;
             text-transform: uppercase;
-            letter-spacing: 3px;
-            transition: all 0.2s;
+            letter-spacing: 2px;
         }
 
         .start-btn:hover {
-            background: #ff8c1a;
-            transform: scale(1.05);
+            opacity: 0.9;
         }
 
         .start-overlay.hidden {
             display: none;
         }
 
+        /* Header */
         .header {
-            height: 80px;
+            height: 60px;
             display: flex;
             align-items: center;
-            justify-content: center;
-            background: #1A1D23;
-            border-bottom: 3px solid #FF7A00;
-            position: relative;
+            justify-content: space-between;
+            padding: 0 20px;
+            background: var(--bg-header);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
 
         .logo {
-            font-size: 2rem;
-            font-weight: 900;
-            color: #FF7A00;
-            letter-spacing: 4px;
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-icon-small {
+            font-size: 1.5rem;
+        }
+
+        .order-count-badge {
+            background: var(--card-color);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Color Picker */
+        .color-picker-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #252525;
+            padding: 4px 10px;
+            border-radius: 8px;
+        }
+
+        .color-picker-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 600;
             text-transform: uppercase;
         }
 
-        .logo-placeholder {
-            width: 60px;
-            height: 60px;
-            margin-right: 15px;
-            background: #FF7A00;
-            border-radius: 8px;
-            opacity: 0.15;
+        .color-input {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 32px;
+            height: 28px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: transparent;
+        }
+
+        .color-input::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+
+        .color-input::-webkit-color-swatch {
+            border: 2px solid #444;
+            border-radius: 6px;
         }
 
         .time {
-            position: absolute;
-            right: 40px;
-            font-size: 1.5rem;
-            color: #B0B0B0;
-            font-weight: 600;
-        }
-
-        .header-subtitle {
-            position: absolute;
-            left: 40px;
-            font-size: 1.2rem;
-            color: #B0B0B0;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
-        .order-count {
-            position: absolute;
-            left: 160px;
-            background: #FF7A00;
-            color: #0F1115;
-            padding: 5px 15px;
-            border-radius: 20px;
+            font-size: 1.4rem;
+            color: var(--text-primary);
             font-weight: 700;
-            font-size: 1rem;
+            font-variant-numeric: tabular-nums;
         }
 
+        /* Container */
         .container {
-            padding: 20px;
-            position: relative;
-            overflow-x: auto;
-            overflow-y: hidden;
+            padding: 16px;
+            min-height: calc(100vh - 60px);
         }
 
-        .container::-webkit-scrollbar {
-            height: 12px;
-        }
-
-        .container::-webkit-scrollbar-track {
-            background: #1A1D23;
-            border-radius: 10px;
-        }
-
-        .container::-webkit-scrollbar-thumb {
-            background: #FF7A00;
-            border-radius: 10px;
-        }
-
-        .container::-webkit-scrollbar-thumb:hover {
-            background: #ff8c1a;
-        }
-
-        .panel-bg {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 500px;
-            height: 500px;
-            background: #FF7A00;
-            border-radius: 50%;
-            opacity: 0.02;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        .orders {
-            display: flex;
-            gap: 20px;
-            min-width: min-content;
-            padding: 10px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .order-column {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            min-width: 350px;
-            max-width: 350px;
-            flex-shrink: 0;
-        }
-
-        .order-card {
-            background: #1A1D23;
-            border-radius: 16px;
-            border: 3px solid #2a2d33;
-            overflow: hidden;
-            transition: border-color 0.2s ease;
+        /* Orders Grid - 5 columns */
+        .orders-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
             width: 100%;
-            display: flex;
-            flex-direction: column;
         }
 
-        .order-card:hover {
-            border-color: #FF7A00;
+        /* ORDER CARD - MINIMALISTIC SOLID COLOR */
+        .order-card {
+            background: var(--card-color);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         .order-card.unpaid {
-            border-color: #ff4444;
+            outline-offset: -3px;
         }
 
-        .order-header {
-            background: linear-gradient(135deg, #FF7A00 0%, #ff9533 100%);
-            color: #0F1115;
-            padding: 12px 15px;
+        /* Card Header */
+        .card-header {
+            padding: 14px 16px;
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            flex-shrink: 0;
-        }
-
-        .order-header.unpaid {
-            background: linear-gradient(135deg, #ff4444 0%, #ff6666 100%);
+            align-items: flex-start;
+            background: rgba(0, 0, 0, 0.15);
         }
 
         .order-number {
-            font-size: 2.2rem;
+            font-size: 1.5rem;
             font-weight: 900;
+            color: white;
             line-height: 1;
         }
 
         .order-meta {
             text-align: right;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-end;
         }
 
+
+
+
+
+        .order-time {
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.75);
+            font-weight: 600;
+        }
+
+        /* Order Type */
         .order-type {
             font-size: 0.75rem;
             font-weight: 700;
-            background: rgba(0, 0, 0, 0.2);
-            padding: 4px 10px;
-            border-radius: 20px;
-            display: inline-block;
-        }
-
-        .payment-badge {
-            font-size: 0.7rem;
-            font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 12px;
-            display: inline-block;
-            margin-top: 4px;
-        }
-
-        .payment-badge.paid {
-            background: #4CAF50;
             color: white;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 6px 12px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            display: inline-block;
+            width: fit-content;
         }
 
-        .payment-badge.unpaid {
-            background: #ff4444;
-            color: white;
-        }
-
-        .order-time {
-            font-size: 0.7rem;
-            opacity: 0.7;
-            margin-top: 3px;
-        }
-
+        /* Order Items */
         .order-items {
-            padding: 12px 18px;
-            overflow-y: auto;
+            padding: 12px 16px;
             flex: 1;
-            min-height: 0;
+            overflow-y: auto;
+            max-height: 200px;
         }
 
         .order-items::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .order-items::-webkit-scrollbar-track {
-            background: #0F1115;
-            border-radius: 4px;
-            margin: 4px;
+            width: 4px;
         }
 
         .order-items::-webkit-scrollbar-thumb {
-            background: #FF7A00;
-            border-radius: 4px;
-        }
-
-        .order-items::-webkit-scrollbar-thumb:hover {
-            background: #ff8c1a;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
         }
 
         .item {
             padding: 10px 0;
-            border-bottom: 1px solid #2a2d33;
-        }
-        
-        .item-info {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
             gap: 4px;
         }
 
@@ -304,146 +286,161 @@
             border-bottom: none;
         }
 
+        .item-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
         .item-name {
-            font-size: 1.15rem;
+            font-size: 1.1rem;
             font-weight: 600;
-            color: #FFFFFF;
+            color: white;
             flex: 1;
-            margin-right: 15px;
         }
 
         .item-qty {
-            font-size: 1.3rem;
-            font-weight: 900;
-            color: #FF7A00;
-            background: rgba(255, 122, 0, 0.1);
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: white;
+            background: rgba(255, 255, 255, 0.2);
             padding: 6px 14px;
             border-radius: 8px;
             min-width: 50px;
             text-align: center;
         }
 
+        .item-detail {
+            font-size: 0.95rem;
+            color: rgba(255, 255, 255, 0.8);
+            padding-left: 10px;
+            border-left: 3px solid rgba(255, 255, 255, 0.4);
+            font-style: italic;
+        }
+
+        /* Ready Button */
         .btn-ready {
             width: 100%;
-            padding: 16px;
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-            color: #FFFFFF;
+            padding: 14px;
+            background:var(--success);
+            color: var(--text-primary);
             border: none;
-            font-size: 1.15rem;
+            font-size: 1rem;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1px;
             cursor: pointer;
-            transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
-            flex-shrink: 0;
         }
 
-        .btn-ready:hover {
-            background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
-        }
-
-        .btn-ready:active {
-            transform: scale(0.98);
-        }
 
         .btn-ready:disabled {
-            background: #666;
+            background: rgba(255, 255, 255, 0.5);
+            color: #666;
             cursor: not-allowed;
         }
 
+        /* Empty State */
         .empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+            color: var(--text-muted);
             text-align: center;
-            color: #B0B0B0;
-            font-size: 1.5rem;
-            opacity: 0.4;
-            padding: 100px;
-            width: 100%;
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-        }
-
-        #asd {
-            font-size: 1.2rem;
-            opacity: 0.7;
-            font-weight: bold;
-            margin-top: 3px;
+            grid-column: 1 / -1;
         }
 
         .empty-icon {
-            font-size: 4rem;
+            font-size: 5rem;
             margin-bottom: 20px;
             opacity: 0.5;
         }
 
+        .empty-text {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        /* Responsive */
+        @media (max-width: 1600px) {
+            .orders-grid {
+                grid-template-columns: repeat(5, 1fr);
+            }
+        }
+
         @media (max-width: 1200px) {
-            .order-column {
-                min-width: 320px;
-                max-width: 320px;
+            .orders-grid {
+                grid-template-columns: repeat(4, 1fr);
             }
         }
 
         @media (max-width: 900px) {
-            .order-column {
-                min-width: 300px;
-                max-width: 300px;
+            .orders-grid {
+                grid-template-columns: repeat(3, 1fr);
             }
         }
 
-        @media (min-width: 1920px) {
-            .order-column {
-                min-width: 400px;
-                max-width: 400px;
+        @media (max-width: 600px) {
+            .orders-grid {
+                grid-template-columns: 1fr;
             }
 
-            .order-number {
-                font-size: 2.8rem;
+            .header {
+                flex-wrap: wrap;
+                height: auto;
+                padding: 12px;
+                gap: 10px;
             }
 
-            .item-name {
-                font-size: 1.3rem;
-            }
-
-            .item-qty {
-                font-size: 1.5rem;
+            .color-picker-label {
+                display: none;
             }
         }
 
-        @media (min-width: 2560px) {
-            .order-column {
-                min-width: 450px;
-                max-width: 450px;
+        @media (min-width: 2200px) {
+            .orders-grid {
+                grid-template-columns: repeat(6, 1fr);
             }
         }
     </style>
 </head>
 
 <body>
-    <div class="start-overlay" id="startOverlay">
-        <h1>👨‍🍳 Smart Food</h1>
+    <!-- <div class="start-overlay" id="startOverlay">
+        <div class="logo-icon">👨‍🍳</div>
+        <h1>Smart Food</h1>
         <p class="start-subtitle">Oshxona paneli</p>
         <button class="start-btn">Boshlash</button>
-    </div>
+    </div> -->
 
     <header class="header">
-        <div class="header-subtitle">Oshxona</div>
-        <span class="order-count" id="orderCount">0</span>
-        <div class="logo-placeholder"></div>
-        <div class="logo">Smart Food</div>
-        <div class="time" id="time"></div>
+        <div class="header-left">
+            <div class="logo">
+                <span class="logo-icon-small">👨‍🍳</span>
+                Smart Food
+            </div>
+            <div class="order-count-badge" id="orderCount">0 ta</div>
+        </div>
+
+        <div class="header-right">
+            <div class="color-picker-wrap">
+                <span class="color-picker-label">Rang</span>
+                <input type="color" class="color-input" id="cardColorInput" value="#e74c3c" title="Karta rangi">
+            </div>
+            <div class="time" id="time">00:00:00</div>
+        </div>
     </header>
 
     <div class="container">
-        <div class="panel-bg"></div>
-        <div class="orders" id="orders">
+        <div class="orders-grid" id="orders">
             <div class="empty">
                 <div class="empty-icon">👨‍🍳</div>
-                Buyurtmalar yo'q
+                <div class="empty-text">Buyurtmalar yo'q</div>
             </div>
         </div>
     </div>
@@ -452,33 +449,52 @@
         const knownOrders = new Set();
         let isFirstLoad = true;
         let audioCtx = null;
-        const COLUMNS = 4;
+
+        // Card Color - saves to localStorage
+        function setCardColor(color) {
+            document.documentElement.style.setProperty('--card-color', color);
+            localStorage.setItem('chef-card-color', color);
+        }
+
+        document.getElementById('cardColorInput').addEventListener('input', (e) => {
+            setCardColor(e.target.value);
+        });
+
+        // Load saved color
+        const savedCardColor = localStorage.getItem('chef-card-color') || '#e74c3c';
+        document.getElementById('cardColorInput').value = savedCardColor;
+        setCardColor(savedCardColor);
+
+        // Auto fullscreen
+        function enterFullscreen() {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) {
+                elem.msRequestFullscreen();
+            }
+        }
 
         function playSound() {
             try {
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 }
-
                 const now = audioCtx.currentTime;
-
-                [0, 0.12, 0.24].forEach((delay, i) => {
+                [0, 0.1, 0.2].forEach((delay, i) => {
                     const osc = audioCtx.createOscillator();
                     const gain = audioCtx.createGain();
-
                     osc.connect(gain);
                     gain.connect(audioCtx.destination);
-
-                    osc.frequency.setValueAtTime(600 + (i * 150), now + delay);
-                    osc.type = 'square';
-
-                    gain.gain.setValueAtTime(0.25, now + delay);
-                    gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.1);
-
+                    osc.frequency.setValueAtTime(800 + (i * 200), now + delay);
+                    osc.type = 'sine';
+                    gain.gain.setValueAtTime(0.15, now + delay);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.15);
                     osc.start(now + delay);
-                    osc.stop(now + delay + 0.1);
+                    osc.stop(now + delay + 0.15);
                 });
-
             } catch (e) {
                 console.log('Sound error:', e);
             }
@@ -498,7 +514,7 @@
         function updateTime() {
             const now = new Date();
             document.getElementById('time').textContent =
-                now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', hour12: false });
+                now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
         }
         setInterval(updateTime, 1000);
         updateTime();
@@ -506,15 +522,25 @@
         function timeAgo(dateStr) {
             const now = new Date();
             const date = new Date(dateStr);
-            const mins = Math.floor((now - date) / 60000);
-            if (mins < 1) return 'Hozirgina';
-            if (mins < 60) return `${mins} daq oldin`;
-            return `${Math.floor(mins / 60)} soat oldin`;
+            let seconds = Math.floor((now - date) / 1000);
+
+            if (seconds < 0) seconds = 0;
+
+            const hours = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+
+            if (hours > 0) {
+                return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            }
+
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
         }
+
 
         async function markReady(orderId, btn) {
             btn.disabled = true;
-            btn.innerHTML = '⏳ Kutib turing...';
+            btn.textContent = '⏳ Kutib turing...';
 
             try {
                 const res = await fetch(`{% url "client:chef_mark_ready" order_id=0 %}`.replace('0', orderId), {
@@ -529,96 +555,76 @@
                     const card = btn.closest('.order-card');
                     card.style.transition = 'all 0.4s ease';
                     card.style.opacity = '0';
-                    card.style.transform = 'scale(0.8) translateY(-20px)';
+                    card.style.transform = 'scale(0.9)';
                     setTimeout(() => {
                         card.remove();
                         knownOrders.delete(orderId);
                         updateOrderCount();
-                        if (document.querySelectorAll('.order-card').length === 0) {
-                            document.getElementById('orders').innerHTML = `
-                                <div class="empty">
-                                    <div class="empty-icon">✅</div>
-                                    Barcha buyurtmalar tayyor!
-                                </div>
-                            `;
-                        }
+                        checkEmpty();
                     }, 400);
                 } else {
                     btn.disabled = false;
-                    btn.innerHTML = '❌ Xatolik';
-                    setTimeout(() => { btn.innerHTML = '✓ Tayyor'; }, 2000);
+                    btn.textContent = '❌ Xatolik';
+                    setTimeout(() => { btn.textContent = '✓ TAYYOR'; }, 2000);
                 }
             } catch (e) {
                 console.error(e);
                 btn.disabled = false;
-                btn.innerHTML = '❌ Xatolik';
-                setTimeout(() => { btn.innerHTML = '✓ Tayyor'; }, 2000);
+                btn.textContent = '❌ Xatolik';
+                setTimeout(() => { btn.textContent = '✓ TAYYOR'; }, 2000);
             }
         }
 
         function updateOrderCount() {
             const count = document.querySelectorAll('.order-card').length;
-            document.getElementById('orderCount').textContent = count;
+            document.getElementById('orderCount').textContent = count + ' ta';
+        }
+
+        function checkEmpty() {
+            if (document.querySelectorAll('.order-card').length === 0) {
+                document.getElementById('orders').innerHTML = `
+                    <div class="empty">
+                        <div class="empty-icon">✅</div>
+                        <div class="empty-text">Barcha buyurtmalar tayyor!</div>
+                    </div>
+                `;
+            }
         }
 
         const orderTypeMap = {
-            HALL: "Zalda",
+            HALL: "Zal",
             PICKUP: "Olib ketish",
             DELIVERY: "Yetkazib berish"
         };
 
         function createOrderCard(order) {
-            console.log(order)
             const items = order.items.map(item => `
                 <div class="item">
-                    <div class="item-info">
+                    <div class="item-row">
                         <span class="item-name">${item.product_name}</span>
-                
                         <span class="item-qty">×${item.quantity}</span>
                     </div>
                     ${item.detail ? `<span class="item-detail">${item.detail}</span>` : ''}
                 </div>
-
             `).join('');
 
             const unpaidClass = order.is_paid ? '' : 'unpaid';
-            const paymentBadge = order.is_paid
-                ? '<span class="payment-badge paid">TO\'LANGAN</span>'
-                : '<span class="payment-badge unpaid">TO\'LANMAGAN</span>';
 
             return `
                 <div class="order-card ${unpaidClass}" data-id="${order.id}">
-                    <div class="order-header ${unpaidClass}">
+                    <div class="card-header">
                         <span class="order-number">#${String(order.display_id).padStart(2, '0')}</span>
                         <div class="order-meta">
-                            <span class="order-type">${orderTypeMap[order.order_type || 'HALL']}</span>
-                            ${paymentBadge}
-                            <div id="asd" class="order-time">${timeAgo(order.created_at)}</div>
+                            <span class="order-type">${orderTypeMap[order.order_type] || 'Zal'}</span>
+                            <span class="order-time">${timeAgo(order.created_at)}</span>
                         </div>
                     </div>
                     <div class="order-items">
                         ${items}
                     </div>
-                    <button class="btn-ready" onclick="markReady(${order.id}, this)">✓ Tayyor</button>
+                    <button class="btn-ready" onclick="markReady(${order.id}, this)">✓ TAYYOR</button>
                 </div>
             `;
-        }
-
-        function distributeOrdersToColumns(orders) {
-            const numColumns = Math.max(COLUMNS, Math.ceil(orders.length / 3));
-            const columns = Array.from({ length: numColumns }, () => []);
-
-            orders.forEach((order, index) => {
-                columns[index % numColumns].push(order);
-            });
-
-            return columns
-                .filter(col => col.length > 0)
-                .map(column => `
-                    <div class="order-column">
-                        ${column.map(order => createOrderCard(order)).join('')}
-                    </div>
-                `).join('');
         }
 
         async function fetchOrders() {
@@ -627,14 +633,9 @@
                 const data = await res.json();
 
                 let hasNewOrder = false;
-                const currentIds = new Set();
-                const newOrderIds = new Set();
-
                 data.orders.forEach(order => {
-                    currentIds.add(order.id);
                     if (!knownOrders.has(order.id) && !isFirstLoad) {
                         hasNewOrder = true;
-                        newOrderIds.add(order.id);
                     }
                 });
 
@@ -650,31 +651,31 @@
                     data.orders.forEach(o => knownOrders.add(o.id));
 
                     if (data.orders.length > 0) {
-                        document.getElementById('orders').innerHTML = distributeOrdersToColumns(data.orders);
+                        document.getElementById('orders').innerHTML =
+                            data.orders.map(order => createOrderCard(order)).join('');
                     } else {
                         document.getElementById('orders').innerHTML = `
                             <div class="empty">
                                 <div class="empty-icon">👨‍🍳</div>
-                                Buyurtmalar yo'q
+                                <div class="empty-text">Buyurtmalar yo'q</div>
                             </div>
                         `;
                     }
-
                     updateOrderCount();
                 }
 
                 isFirstLoad = false;
-
             } catch (e) {
                 console.error(e);
             }
         }
 
-        document.getElementById('startOverlay').addEventListener('click', () => {
-            unlockAudio();
-            playSound();
-            document.getElementById('startOverlay').classList.add('hidden');
-        });
+        // document.getElementById('startOverlay').addEventListener('click', () => {
+        //     unlockAudio();
+        //     playSound();
+        //     enterFullscreen();
+        //     document.getElementById('startOverlay').classList.add('hidden');
+        // });
 
         fetchOrders();
         setInterval(fetchOrders, 3000);
