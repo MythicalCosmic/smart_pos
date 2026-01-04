@@ -32,15 +32,11 @@
         }
 
         .logo {
-            display: flex;
-            align-items: center;
-        }
-
-        .logo img {
-            height: 40px;
-            width: auto;
-            border-radius: 8px;
-            object-fit: contain;
+            font-size: 2rem;
+            font-weight: 900;
+            color: #FF7A00;
+            letter-spacing: 4px;
+            text-transform: uppercase;
         }
 
         .logo-placeholder {
@@ -51,6 +47,7 @@
             border-radius: 8px;
             opacity: 0.15;
         }
+
 
         .time {
             position: absolute;
@@ -226,20 +223,17 @@
     </div>
 
     <header class="header">
-        <div class="logo-placeholder"></div>
-        <div class="logo"> <img src="/media/photos/logo.jpg" alt="Smart Food Logo"></div>
+        <div class="logo">Smart Food</div>
         <div class="time" id="time"></div>
     </header>
 
     <div class="container">
         <div style="border-right: 5px solid #FF7A00;" class="panel processing">
-            <div class="panel-bg"></div>
             <div class="panel-title">Tayyorlanmoqda</div>
             <div class="orders" id="processing"></div>
         </div>
 
         <div class="panel ready">
-            <div class="panel-bg"></div>
             <div class="panel-title">Tayyor</div>
             <div class="orders" id="ready"></div>
         </div>
