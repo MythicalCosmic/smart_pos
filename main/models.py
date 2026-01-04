@@ -51,6 +51,7 @@ class Session(models.Model):
 class Category(models.Model):
     name = models.CharField(max_length=50)
     sort_order = models.IntegerField(default=0)
+    colors = models.JSONField(default=list, blank=True, help_text="Colors: ['#e74c3c', '#3498db']")
     status = models.CharField(
         max_length=10,
         choices=[('ACTIVE', 'Active'), ('INACTIVE', 'Inactive')],
@@ -71,6 +72,7 @@ class Product(models.Model):
         on_delete=models.CASCADE,
         related_name="products"
     )
+    colors = models.JSONField(default=list, blank=True, help_text="Colors: ['#e74c3c', '#3498db']")
     name = models.CharField(max_length=100)
     description = models.TextField(null=True, blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)

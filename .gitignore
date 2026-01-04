@@ -15,3 +15,9 @@ coverage
 coverage.*
 htmlcov/
 .pytest_cache/
+logger/
+logs/
+*.log
+celerybeat-schedule
+*.txt
+logger/logs.txt

@@ -32,6 +32,7 @@ class ProductService:
                 'name': product.name,
                 'description': product.description,
                 'price': str(product.price),
+                'color': product.colors,
                 'category': {
                     'id': product.category.id,
                     'name': product.category.name,
