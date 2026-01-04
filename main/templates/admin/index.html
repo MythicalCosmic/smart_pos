@@ -3,25 +3,84 @@
 
 {% block content %}
     {% component "unfold/components/container.html" %}
-        {# Period Filter #}
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-            <div class="flex gap-2">
-                {% for filter in filters %}
-                    <a href="{{ filter.link }}" 
-                       style="padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; display: inline-block;
-                              {% if filter.active %}
-                                  background-color: #6366f1; color: white;
-                              {% else %}
-                                  background-color: #374151; color: #d1d5db;
-                              {% endif %}">
-                        {{ filter.label }}
-                    </a>
-                {% endfor %}
+        <div class="flex flex-col gap-4 mb-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        <span class="material-symbols-outlined text-sm align-middle">schedule</span>
+                        {{ current_time }} (UTC+5)
+                    </p>
+                </div>
+                
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="flex gap-1">
+                        {% for filter in filters %}
+                            <a href="{{ filter.link }}" 
+                               style="padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; display: inline-block; transition: all 0.2s;
+                                      {% if filter.active %}
+                                          background-color: #6366f1; color: white;
+                                      {% else %}
+                                          background-color: #374151; color: #d1d5db;
+                                      {% endif %}">
+                                {{ filter.label }}
+                            </a>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="h-6 w-px bg-gray-300 dark:bg-gray-600 hidden sm:block"></div>
+                    
+                    <form id="dateFilterForm" method="get" class="flex items-center gap-2">
+                        <div class="flex items-center gap-1">
+                            <span class="text-xs text-gray-500 dark:text-gray-400">From</span>
+                            <input type="date" 
+                                   name="date_from" 
+                                   value="{{ date_from }}"
+                                   onchange="this.form.submit()"
+                                   class="px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm w-32">
+                            <input type="time" 
+                                   name="time_from" 
+                                   value="{{ time_from }}"
+                                   step="60"
+                                   onchange="this.form.submit()"
+                                   class="px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm w-24"
+                                   style="-webkit-appearance: none;">
+                        </div>
+                        <span class="text-gray-400">—</span>
+                        <div class="flex items-center gap-1">
+                            <span class="text-xs text-gray-500 dark:text-gray-400">To</span>
+                            <input type="date" 
+                                   name="date_to" 
+                                   value="{{ date_to }}"
+                                   onchange="this.form.submit()"
+                                   class="px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm w-32">
+                            <input type="time" 
+                                   name="time_to" 
+                                   value="{{ time_to }}"
+                                   step="60"
+                                   onchange="this.form.submit()"
+                                   class="px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm w-24"
+                                   style="-webkit-appearance: none;">
+                        </div>
+                        {% if date_from or date_to %}
+                            <a href="?" 
+                               style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; background-color: #ef4444; color: white; text-decoration: none;"
+                               title="Clear filters">
+                                <span class="material-symbols-outlined text-sm align-middle">close</span>
+                            </a>
+                        {% endif %}
+                    </form>
+                </div>
             </div>
+
+            {% if period == 'custom' %}
+            <div class="px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg border border-indigo-200 dark:border-indigo-800 inline-flex items-center gap-2 self-start">
+                <span class="material-symbols-outlined text-sm text-indigo-600 dark:text-indigo-400">date_range</span>
+                <p class="text-sm font-medium text-indigo-700 dark:text-indigo-300">{{ period_label }}</p>
+            </div>
+            {% endif %}
         </div>
 
-        {# KPI Cards #}
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {% for kpi in kpis %}
                 {% component "unfold/components/card.html" %}
@@ -39,8 +98,8 @@
                                 {{ kpi.footer }}
                             {% endcomponent %}
                         </div>
-                        <div class="ml-4">
-                            <span class="material-symbols-outlined text-3xl text-primary-600 dark:text-primary-400">
+                        <div class="ml-4 w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-xl text-indigo-600 dark:text-indigo-400">
                                 {{ kpi.icon }}
                             </span>
                         </div>
@@ -49,7 +108,6 @@
             {% endfor %}
         </div>
 
-        {# Order Status Cards #}
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             {% for card in order_status_cards %}
                 {% component "unfold/components/card.html" %}
@@ -59,7 +117,7 @@
                         {% endcomponent %}
                         
                         {% component "unfold/components/title.html" with class="text-4xl font-bold" %}
-                            <span class="{% if card.color == 'blue' %}text-blue-600{% elif card.color == 'green' %}text-green-600{% elif card.color == 'yellow' %}text-yellow-600{% endif %}">
+                            <span class="{% if card.color == 'orange' %}text-orange-500{% elif card.color == 'yellow' %}text-amber-500{% elif card.color == 'red' %}text-red-500{% endif %}">
                                 {{ card.count }}
                             </span>
                         {% endcomponent %}
@@ -68,32 +126,61 @@
             {% endfor %}
         </div>
 
-        {# Charts Row #}
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            {# Revenue Chart #}
-            {% component "unfold/components/card.html" %}
-                {% component "unfold/components/title.html" with class="mb-4" %}
-                    Revenue Trend
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            {% for card in payment_status_cards %}
+                {% component "unfold/components/card.html" %}
+                    <div class="flex items-center justify-between p-4">
+                        <div>
+                            {% component "unfold/components/text.html" with class="text-gray-500 dark:text-gray-400 text-sm mb-1" %}
+                                {{ card.title }}
+                            {% endcomponent %}
+                            {% component "unfold/components/title.html" with class="text-4xl font-bold" %}
+                                <span class="{% if card.color == 'green' %}text-emerald-500{% elif card.color == 'red' %}text-red-500{% endif %}">
+                                    {{ card.count }}
+                                </span>
+                            {% endcomponent %}
+                        </div>
+                        <div class="w-12 h-12 rounded-xl {% if card.color == 'green' %}bg-emerald-100 dark:bg-emerald-900/30{% else %}bg-red-100 dark:bg-red-900/30{% endif %} flex items-center justify-center">
+                            <span class="material-symbols-outlined text-2xl {% if card.color == 'green' %}text-emerald-500{% else %}text-red-500{% endif %}">
+                                {% if card.color == 'green' %}check_circle{% else %}pending{% endif %}
+                            </span>
+                        </div>
+                    </div>
                 {% endcomponent %}
+            {% endfor %}
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {% component "unfold/components/card.html" %}
+                <div class="flex items-center justify-between mb-4">
+                    {% component "unfold/components/title.html" %}
+                        Revenue Trend
+                    {% endcomponent %}
+                    <span class="px-2 py-1 rounded-md text-xs font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
+                        UZS
+                    </span>
+                </div>
                 <div style="position: relative; height: 250px;">
                     <canvas id="revenueChart"></canvas>
                 </div>
             {% endcomponent %}
 
-            {# Orders Chart #}
             {% component "unfold/components/card.html" %}
-                {% component "unfold/components/title.html" with class="mb-4" %}
-                    Orders Trend
-                {% endcomponent %}
+                <div class="flex items-center justify-between mb-4">
+                    {% component "unfold/components/title.html" %}
+                        Orders Trend
+                    {% endcomponent %}
+                    <span class="px-2 py-1 rounded-md text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                        Count
+                    </span>
+                </div>
                 <div style="position: relative; height: 250px;">
                     <canvas id="ordersChart"></canvas>
                 </div>
             {% endcomponent %}
         </div>
 
-        {# Bottom Row: Top Products, Categories, Cashiers #}
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {# Top Products #}
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             {% component "unfold/components/card.html" %}
                 {% component "unfold/components/title.html" with class="mb-4" %}
                     Top Products
@@ -121,7 +208,6 @@
                 </div>
             {% endcomponent %}
 
-            {# Category Revenue #}
             {% component "unfold/components/card.html" %}
                 {% component "unfold/components/title.html" with class="mb-4" %}
                     Revenue by Category
@@ -144,7 +230,6 @@
                 </div>
             {% endcomponent %}
 
-            {# Cashier Performance #}
             {% component "unfold/components/card.html" %}
                 {% component "unfold/components/title.html" with class="mb-4" %}
                     Top Cashiers
@@ -172,23 +257,79 @@
                 </div>
             {% endcomponent %}
         </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {% component "unfold/components/card.html" %}
+                {% component "unfold/components/title.html" with class="mb-4" %}
+                    Session Stats
+                {% endcomponent %}
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        {% component "unfold/components/text.html" with class="text-gray-500 dark:text-gray-400 text-sm mb-1" %}
+                            Active Sessions
+                        {% endcomponent %}
+                        {% component "unfold/components/title.html" with class="text-2xl font-bold text-green-600" %}
+                            {{ login_stats.active_sessions }}
+                        {% endcomponent %}
+                    </div>
+                    <div class="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        {% component "unfold/components/text.html" with class="text-gray-500 dark:text-gray-400 text-sm mb-1" %}
+                            Recent Logins
+                        {% endcomponent %}
+                        {% component "unfold/components/title.html" with class="text-2xl font-bold text-blue-600" %}
+                            {{ login_stats.recent_logins_count }}
+                        {% endcomponent %}
+                    </div>
+                </div>
+            {% endcomponent %}
+
+            {% component "unfold/components/card.html" %}
+                {% component "unfold/components/title.html" with class="mb-4" %}
+                    Recent Logins
+                {% endcomponent %}
+                <div class="space-y-3 max-h-48 overflow-y-auto">
+                    {% for login in recent_logins %}
+                        <div class="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
+                            <div class="flex-1">
+                                {% component "unfold/components/text.html" with class="font-medium text-gray-900 dark:text-white" %}
+                                    {{ login.name }}
+                                {% endcomponent %}
+                                {% component "unfold/components/text.html" with class="text-sm text-gray-500 dark:text-gray-400" %}
+                                    {{ login.email }}
+                                {% endcomponent %}
+                            </div>
+                            <div class="text-right">
+                                {% component "unfold/components/text.html" with class="text-sm text-gray-600 dark:text-gray-400" %}
+                                    {{ login.last_login_at }}
+                                {% endcomponent %}
+                                {% if login.last_login_api %}
+                                    {% component "unfold/components/text.html" with class="text-xs text-gray-400 dark:text-gray-500" %}
+                                        via {{ login.last_login_api }}
+                                    {% endcomponent %}
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        {% component "unfold/components/text.html" with class="text-gray-400 dark:text-gray-500 text-center py-8" %}
+                            No recent logins
+                        {% endcomponent %}
+                    {% endfor %}
+                </div>
+            {% endcomponent %}
+        </div>
     {% endcomponent %}
 
-    {# Store chart data in script tags #}
     <script id="revenue-data" type="application/json">{{ revenue_chart_json|safe }}</script>
     <script id="orders-data" type="application/json">{{ orders_chart_json|safe }}</script>
 
-    {# Chart.js Script #}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Revenue Chart
             const revenueCtx = document.getElementById('revenueChart');
             if (revenueCtx) {
                 try {
                     const revenueDataEl = document.getElementById('revenue-data');
                     const revenueData = JSON.parse(revenueDataEl.textContent);
-                    console.log('Revenue Chart Data:', revenueData);
                     
                     new Chart(revenueCtx, {
                         type: 'line',
@@ -207,6 +348,7 @@
                                 tooltip: {
                                     backgroundColor: 'rgba(0, 0, 0, 0.8)',
                                     padding: 12,
+                                    cornerRadius: 8,
                                     displayColors: false,
                                     callbacks: {
                                         label: function(context) {
@@ -220,7 +362,12 @@
                                     beginAtZero: true,
                                     ticks: {
                                         callback: function(value) {
-                                            return value.toLocaleString() + ' UZS';
+                                            if (value >= 1000000) {
+                                                return (value / 1000000).toFixed(1) + 'M';
+                                            } else if (value >= 1000) {
+                                                return (value / 1000).toFixed(0) + 'K';
+                                            }
+                                            return value;
                                         }
                                     },
                                     grid: {
@@ -235,12 +382,9 @@
                             }
                         }
                     });
-                    console.log('Revenue chart created successfully');
                 } catch (error) {
                     console.error('Error creating revenue chart:', error);
                 }
-            } else {
-                console.error('Revenue chart canvas not found');
             }
 
             const ordersCtx = document.getElementById('ordersChart');
@@ -248,7 +392,6 @@
                 try {
                     const ordersDataEl = document.getElementById('orders-data');
                     const ordersData = JSON.parse(ordersDataEl.textContent);
-                    console.log('Orders Chart Data:', ordersData);
                     
                     new Chart(ordersCtx, {
                         type: 'line',
@@ -267,6 +410,7 @@
                                 tooltip: {
                                     backgroundColor: 'rgba(0, 0, 0, 0.8)',
                                     padding: 12,
+                                    cornerRadius: 8,
                                     displayColors: false,
                                 }
                             },
@@ -289,13 +433,29 @@
                             }
                         }
                     });
-                    console.log('Orders chart created successfully');
                 } catch (error) {
                     console.error('Error creating orders chart:', error);
                 }
-            } else {
-                console.error('Orders chart canvas not found');
             }
         });
     </script>
+    
+    <style>
+        input[type="time"]::-webkit-calendar-picker-indicator {
+            filter: invert(0.5);
+            font-style: bold;
+        }
+        @media (prefers-color-scheme: dark) {
+            input[type="time"]::-webkit-calendar-picker-indicator {
+                filter: invert(1);
+            }
+        }
+        input[type="time"] {
+            background-color: grey;
+            
+        }
+        input[type="date"] {
+            background-color: grey;
+        }
+    </style>
 {% endblock %}

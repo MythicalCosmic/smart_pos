@@ -301,7 +301,7 @@ class CashRegisterAdmin(ModelAdmin):
     
     @display(description=_("Current Balance"))
     def current_balance_display(self, obj):
-        return f"${obj.current_balance:.2f}"
+        return f"{obj.current_balance:.2f} UZS"
 
 
 @admin.register(Inkassa)

@@ -1,94 +1,168 @@
 from django.db.models import Sum, Count, Avg, Q, F
 from django.db import models
 from django.utils import timezone
-from datetime import timedelta
-from main.models import Order, Product, Category, User, Inkassa, CashRegister, OrderItem
+from datetime import timedelta, datetime
+from main.models import Order, Product, Category, User, Inkassa, CashRegister, OrderItem, Session
 import json
+import pytz
+
+
+UZB_TZ = pytz.timezone('Asia/Tashkent')
 
 
 def dashboard_callback(request, context):
-    """
-    Custom dashboard callback for Unfold admin
-    Provides data for charts and statistics
-    """
     
-    print("=" * 50)
-    print("DASHBOARD CALLBACK CALLED!")
-    print("=" * 50)
+    period = request.GET.get('period', 'week')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    time_from = request.GET.get('time_from', '00:00')
+    time_to = request.GET.get('time_to', '23:59')
     
-    # Get time filters from request
-    period = request.GET.get('period', 'week')  # day, week, month, year
+    now = timezone.now().astimezone(UZB_TZ)
     
-    # Calculate date ranges
-    now = timezone.now()
-    if period == 'day':
-        start_date = now - timedelta(hours=24)
+    if date_from:
+        try:
+            hour_from, minute_from = map(int, time_from.split(':')) if time_from else (0, 0)
+            start_date = UZB_TZ.localize(
+                datetime.strptime(date_from, '%Y-%m-%d').replace(
+                    hour=hour_from, minute=minute_from, second=0, microsecond=0
+                )
+            )
+        except ValueError:
+            start_date = now - timedelta(days=7)
+    else:
+        start_date = None
+    
+    if date_to:
+        try:
+            hour_to, minute_to = map(int, time_to.split(':')) if time_to else (23, 59)
+            end_date = UZB_TZ.localize(
+                datetime.strptime(date_to, '%Y-%m-%d').replace(
+                    hour=hour_to, minute=minute_to, second=59, microsecond=999999
+                )
+            )
+        except ValueError:
+            end_date = now
+    else:
+        end_date = None
+    
+    if start_date and end_date:
+        period = 'custom'
+        days_diff = (end_date - start_date).days
+        hours_diff = (end_date - start_date).total_seconds() / 3600
+        if hours_diff <= 24:
+            interval = 'hour'
+        elif days_diff <= 31:
+            interval = 'day'
+        else:
+            interval = 'month'
+    elif start_date:
+        end_date = now
+        period = 'custom'
+        days_diff = (end_date - start_date).days
+        if days_diff <= 1:
+            interval = 'hour'
+        elif days_diff <= 31:
+            interval = 'day'
+        else:
+            interval = 'month'
+    elif end_date:
+        start_date = end_date - timedelta(days=7)
+        period = 'custom'
+        interval = 'day'
+    elif period == 'day':
+        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = now
         interval = 'hour'
     elif period == 'week':
         start_date = now - timedelta(days=7)
+        end_date = now
         interval = 'day'
     elif period == 'month':
         start_date = now - timedelta(days=30)
+        end_date = now
         interval = 'day'
     elif period == 'year':
         start_date = now - timedelta(days=365)
+        end_date = now
         interval = 'month'
     else:
         start_date = now - timedelta(days=7)
+        end_date = now
         interval = 'day'
     
-    # Get cash register
+    date_filter = Q(created_at__gte=start_date) & Q(created_at__lte=end_date)
+    
     cash_register = CashRegister.objects.first()
     current_balance = cash_register.current_balance if cash_register else 0
     
-    # Get last inkassa
     last_inkassa = Inkassa.objects.order_by('-created_at').first()
     period_start = last_inkassa.period_end if last_inkassa else Order.objects.order_by('created_at').first().created_at if Order.objects.exists() else now
     
-    # Orders statistics
-    total_orders = Order.objects.filter(
-        created_at__gte=start_date
-    ).count()
+    filtered_orders = Order.objects.filter(date_filter)
     
-    open_orders = Order.objects.filter(status='OPEN').count()
-    paid_orders = Order.objects.filter(status='PAID').count()
-    ready_orders = Order.objects.filter(status='READY').count()
+    total_orders = filtered_orders.count()
     
-    # Revenue statistics
-    total_revenue = Order.objects.filter(
-        status__in=['PAID', 'READY'],
-        created_at__gte=start_date
+    preparing_orders = filtered_orders.filter(status='PREPARING').count()
+    ready_orders = filtered_orders.filter(status='READY').count()
+    canceled_orders = filtered_orders.filter(status='CANCELED').count()
+    
+    paid_orders = filtered_orders.filter(is_paid=True).count()
+    unpaid_orders = filtered_orders.filter(is_paid=False).count()
+    
+    total_revenue = filtered_orders.filter(
+        is_paid=True
     ).aggregate(total=Sum('total_amount'))['total'] or 0
     
-    avg_order_value = Order.objects.filter(
-        status__in=['PAID', 'READY'],
-        created_at__gte=start_date
+    avg_order_value = filtered_orders.filter(
+        is_paid=True
     ).aggregate(avg=Avg('total_amount'))['avg'] or 0
     
-    # Current period (since last inkassa) revenue
     current_period_revenue = Order.objects.filter(
-        status__in=['PAID', 'READY'],
+        is_paid=True,
         created_at__gte=period_start
     ).aggregate(total=Sum('total_amount'))['total'] or 0
     
-    # Revenue chart data (Chart.js format)
+    active_session_threshold = now - timedelta(minutes=30)
+    active_sessions = Session.objects.filter(
+        last_activity__gte=active_session_threshold
+    ).count()
+    
+    recent_logins = User.objects.filter(
+        last_login_at__gte=start_date,
+        last_login_at__lte=end_date
+    ).order_by('-last_login_at')[:10]
+    
+    recent_logins_count = User.objects.filter(
+        last_login_at__gte=start_date,
+        last_login_at__lte=end_date
+    ).count()
+    
+    current_user = None
+    if hasattr(request, 'user') and request.user.is_authenticated:
+        current_user = {
+            'id': request.user.id,
+            'name': f"{request.user.first_name} {request.user.last_name}",
+            'email': request.user.email,
+            'last_login': request.user.last_login_at.astimezone(UZB_TZ).strftime('%Y-%m-%d %H:%M') if hasattr(request.user, 'last_login_at') and request.user.last_login_at else None,
+        }
+    
     try:
-        revenue_chart_data = get_revenue_chart_data(start_date, interval)
+        revenue_chart_data = get_revenue_chart_data(start_date, end_date, interval)
     except Exception as e:
         print(f"Error generating revenue chart: {e}")
         revenue_chart_data = {'labels': [], 'datasets': [{'label': 'Revenue', 'data': []}]}
     
-    # Orders chart data
     try:
-        orders_chart_data = get_orders_chart_data(start_date, interval)
+        orders_chart_data = get_orders_chart_data(start_date, end_date, interval)
     except Exception as e:
         print(f"Error generating orders chart: {e}")
         orders_chart_data = {'labels': [], 'datasets': [{'label': 'Orders', 'data': []}]}
     
-    # Top products
     top_products = OrderItem.objects.filter(
         order__created_at__gte=start_date,
-        order__status__in=['PAID', 'READY']
+        order__created_at__lte=end_date,
+        order__is_paid=True
     ).values(
         'product__name'
     ).annotate(
@@ -96,20 +170,19 @@ def dashboard_callback(request, context):
         total_revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
     ).order_by('-total_quantity')[:5]
     
-    # Category breakdown
     category_data = OrderItem.objects.filter(
         order__created_at__gte=start_date,
-        order__status__in=['PAID', 'READY']
+        order__created_at__lte=end_date,
+        order__is_paid=True
     ).values(
         'product__category__name'
     ).annotate(
         revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
     ).order_by('-revenue')
     
-    # Cashier performance
     cashier_performance = Order.objects.filter(
-        status__in=['PAID', 'READY'],
-        created_at__gte=start_date,
+        date_filter,
+        is_paid=True,
         cashier__isnull=False
     ).values(
         'cashier__first_name',
@@ -119,59 +192,104 @@ def dashboard_callback(request, context):
         total_revenue=Sum('total_amount')
     ).order_by('-total_revenue')[:5]
     
-    # Period filters for navigation
     filters = [
-        {'label': 'Today', 'link': '?period=day'},
-        {'label': 'Week', 'link': '?period=week'},
-        {'label': 'Month', 'link': '?period=month'},
-        {'label': 'Year', 'link': '?period=year'},
+        {'label': 'Today', 'link': '?period=day', 'active': period == 'day'},
+        {'label': 'Week', 'link': '?period=week', 'active': period == 'week'},
+        {'label': 'Month', 'link': '?period=month', 'active': period == 'month'},
+        {'label': 'Year', 'link': '?period=year', 'active': period == 'year'},
     ]
+    
+    if period == 'custom':
+        period_label = f"{start_date.strftime('%d.%m.%Y %H:%M')} — {end_date.strftime('%d.%m.%Y %H:%M')}"
+    elif period == 'day':
+        period_label = 'Today'
+    elif period == 'week':
+        period_label = 'Last 7 days'
+    elif period == 'month':
+        period_label = 'Last 30 days'
+    elif period == 'year':
+        period_label = 'Last 365 days'
+    else:
+        period_label = period
     
     context.update({
         'period': period,
+        'period_label': period_label,
         'filters': filters,
+        'current_user': current_user,
+        'date_from': date_from or '',
+        'date_to': date_to or '',
+        'time_from': time_from or '00:00',
+        'time_to': time_to or '23:59',
+        'current_time': now.strftime('%d.%m.%Y %H:%M'),
         'kpis': [
             {
                 'title': 'Total Revenue',
                 'metric': f'{total_revenue:,.0f} UZS',
-                'footer': f'Last {period}',
+                'footer': period_label,
                 'icon': 'payments',
             },
             {
                 'title': 'Total Orders',
                 'metric': str(total_orders),
-                'footer': f'Last {period}',
+                'footer': period_label,
                 'icon': 'shopping_cart',
             },
             {
                 'title': 'Avg Order Value',
                 'metric': f'{avg_order_value:,.0f} UZS',
-                'footer': f'Last {period}',
+                'footer': period_label,
                 'icon': 'trending_up',
             },
             {
                 'title': 'Cash Register',
                 'metric': f'{current_balance:,.0f} UZS',
-                'footer': f'Current period: {current_period_revenue:,.0f} UZS',
+                'footer': f'Since last inkassa: {current_period_revenue:,.0f} UZS',
                 'icon': 'account_balance_wallet',
             },
         ],
         'order_status_cards': [
             {
-                'title': 'Open Orders',
-                'count': open_orders,
-                'color': 'blue',
+                'title': 'Preparing',
+                'count': preparing_orders,
+                'color': 'orange',
             },
+            {
+                'title': 'Ready',
+                'count': ready_orders,
+                'color': 'yellow',
+            },
+            {
+                'title': 'Canceled',
+                'count': canceled_orders,
+                'color': 'red',
+            },
+        ],
+        'payment_status_cards': [
             {
                 'title': 'Paid Orders',
                 'count': paid_orders,
                 'color': 'green',
             },
             {
-                'title': 'Ready Orders',
-                'count': ready_orders,
-                'color': 'yellow',
+                'title': 'Unpaid Orders',
+                'count': unpaid_orders,
+                'color': 'red',
             },
+        ],
+        'login_stats': {
+            'active_sessions': active_sessions,
+            'recent_logins_count': recent_logins_count,
+        },
+        'recent_logins': [
+            {
+                'id': user.id,
+                'name': f"{user.first_name} {user.last_name}",
+                'email': user.email,
+                'last_login_at': user.last_login_at.astimezone(UZB_TZ).strftime('%d.%m.%Y %H:%M') if user.last_login_at else None,
+                'last_login_api': user.last_login_api,
+            }
+            for user in recent_logins
         ],
         'revenue_chart_json': json.dumps(revenue_chart_data),
         'orders_chart_json': json.dumps(orders_chart_data),
@@ -184,53 +302,54 @@ def dashboard_callback(request, context):
     return context
 
 
-def get_revenue_chart_data(start_date, interval):
-    """Generate revenue chart data for Chart.js"""
+def get_revenue_chart_data(start_date, end_date, interval):
     labels = []
     data = []
     
     if interval == 'hour':
-        # Last 24 hours
-        for i in range(24):
-            hour_start = start_date + timedelta(hours=i)
-            hour_end = hour_start + timedelta(hours=1)
-            labels.append(hour_start.strftime('%H:00'))
+        current = start_date.replace(minute=0, second=0, microsecond=0)
+        while current <= end_date:
+            hour_end = current + timedelta(hours=1)
+            labels.append(current.strftime('%H:%M'))
             
             revenue = Order.objects.filter(
-                status__in=['PAID', 'READY'],
-                created_at__gte=hour_start,
+                is_paid=True,
+                created_at__gte=current,
                 created_at__lt=hour_end
             ).aggregate(total=Sum('total_amount'))['total'] or 0
             data.append(float(revenue))
+            current = hour_end
     
     elif interval == 'day':
-        # Last 7 or 30 days
-        days = 7 if (timezone.now() - start_date).days <= 7 else 30
-        for i in range(days):
-            day_start = start_date + timedelta(days=i)
-            day_end = day_start + timedelta(days=1)
-            labels.append(day_start.strftime('%b %d'))
+        current = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        while current <= end_date:
+            day_end = current + timedelta(days=1)
+            labels.append(current.strftime('%d.%m'))
             
             revenue = Order.objects.filter(
-                status__in=['PAID', 'READY'],
-                created_at__gte=day_start,
+                is_paid=True,
+                created_at__gte=current,
                 created_at__lt=day_end
             ).aggregate(total=Sum('total_amount'))['total'] or 0
             data.append(float(revenue))
+            current = day_end
     
     elif interval == 'month':
-        # Last 12 months
-        for i in range(12):
-            month_start = start_date + timedelta(days=i*30)
-            month_end = month_start + timedelta(days=30)
-            labels.append(month_start.strftime('%b'))
+        current = start_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        while current <= end_date:
+            if current.month == 12:
+                month_end = current.replace(year=current.year + 1, month=1)
+            else:
+                month_end = current.replace(month=current.month + 1)
+            labels.append(current.strftime('%b %Y'))
             
             revenue = Order.objects.filter(
-                status__in=['PAID', 'READY'],
-                created_at__gte=month_start,
+                is_paid=True,
+                created_at__gte=current,
                 created_at__lt=month_end
             ).aggregate(total=Sum('total_amount'))['total'] or 0
             data.append(float(revenue))
+            current = month_end
     
     return {
         'labels': labels,
@@ -240,51 +359,56 @@ def get_revenue_chart_data(start_date, interval):
             'borderColor': '#10b981',
             'backgroundColor': 'rgba(16, 185, 129, 0.1)',
             'tension': 0.4,
+            'fill': True,
         }]
     }
 
 
-def get_orders_chart_data(start_date, interval):
-    """Generate orders chart data for Chart.js"""
+def get_orders_chart_data(start_date, end_date, interval):
     labels = []
     data = []
     
     if interval == 'hour':
-        for i in range(24):
-            hour_start = start_date + timedelta(hours=i)
-            hour_end = hour_start + timedelta(hours=1)
-            labels.append(hour_start.strftime('%H:00'))
+        current = start_date.replace(minute=0, second=0, microsecond=0)
+        while current <= end_date:
+            hour_end = current + timedelta(hours=1)
+            labels.append(current.strftime('%H:%M'))
             
             count = Order.objects.filter(
-                created_at__gte=hour_start,
+                created_at__gte=current,
                 created_at__lt=hour_end
             ).count()
             data.append(count)
+            current = hour_end
     
     elif interval == 'day':
-        days = 7 if (timezone.now() - start_date).days <= 7 else 30
-        for i in range(days):
-            day_start = start_date + timedelta(days=i)
-            day_end = day_start + timedelta(days=1)
-            labels.append(day_start.strftime('%b %d'))
+        current = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        while current <= end_date:
+            day_end = current + timedelta(days=1)
+            labels.append(current.strftime('%d.%m'))
             
             count = Order.objects.filter(
-                created_at__gte=day_start,
+                created_at__gte=current,
                 created_at__lt=day_end
             ).count()
             data.append(count)
+            current = day_end
     
     elif interval == 'month':
-        for i in range(12):
-            month_start = start_date + timedelta(days=i*30)
-            month_end = month_start + timedelta(days=30)
-            labels.append(month_start.strftime('%b'))
+        current = start_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        while current <= end_date:
+            if current.month == 12:
+                month_end = current.replace(year=current.year + 1, month=1)
+            else:
+                month_end = current.replace(month=current.month + 1)
+            labels.append(current.strftime('%b %Y'))
             
             count = Order.objects.filter(
-                created_at__gte=month_start,
+                created_at__gte=current,
                 created_at__lt=month_end
             ).count()
             data.append(count)
+            current = month_end
     
     return {
         'labels': labels,
@@ -294,5 +418,6 @@ def get_orders_chart_data(start_date, interval):
             'borderColor': '#3b82f6',
             'backgroundColor': 'rgba(59, 130, 246, 0.1)',
             'tension': 0.4,
+            'fill': True,
         }]
     }
