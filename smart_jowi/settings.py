@@ -285,3 +285,7 @@ LOGGING = {
         },
     },
 }
+
+
+TIME_ZONE = 'Asia/Tashkent'
+USE_TZ = True

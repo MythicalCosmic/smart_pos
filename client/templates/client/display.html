@@ -32,11 +32,15 @@
         }
 
         .logo {
-            font-size: 2rem;
-            font-weight: 900;
-            color: #FF7A00;
-            letter-spacing: 4px;
-            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+        }
+
+        .logo img {
+            height: 40px;
+            width: auto;
+            border-radius: 8px;
+            object-fit: contain;
         }
 
         .logo-placeholder {
@@ -223,12 +227,12 @@
 
     <header class="header">
         <div class="logo-placeholder"></div>
-        <div class="logo">Smart Food</div>
+        <div class="logo"> <img src="/media/photos/logo.jpg" alt="Smart Food Logo"></div>
         <div class="time" id="time"></div>
     </header>
 
     <div class="container">
-        <div class="panel processing">
+        <div style="border-right: 5px solid #FF7A00;" class="panel processing">
             <div class="panel-bg"></div>
             <div class="panel-title">Tayyorlanmoqda</div>
             <div class="orders" id="processing"></div>
@@ -314,10 +318,9 @@
                 });
 
                 // Update processing orders
-                document.getElementById('processing').innerHTML = data.processing.length
+                let proccess = document.getElementById('processing').innerHTML = data.processing.length
                     ? data.processing.map(o => `<div class="order">${String(o.display_id).padStart(2, '0')}</div>`).join('')
                     : '<div class="empty">Buyurtmalar yo\'q</div>';
-
                 // Update ready orders
                 document.getElementById('ready').innerHTML = data.finished.length
                     ? data.finished.map(o => {

@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="uz">
 
 <head>
@@ -189,20 +190,22 @@
         }
 
         /* Orders Grid - 5 columns */
-        .orders-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 12px;
+         .orders-grid {
+            column-count: 6;
+            column-gap: 12px;
             width: 100%;
         }
 
-        /* ORDER CARD - MINIMALISTIC SOLID COLOR */
+        /* ORDER CARD - Dynamic height based on content */
         .order-card {
             background: var(--card-color);
             border-radius: 12px;
             overflow: hidden;
             display: flex;
             flex-direction: column;
+            break-inside: avoid;
+            margin-bottom: 12px;
+            page-break-inside: avoid;
         }
 
         .order-card.unpaid {
@@ -233,11 +236,14 @@
             align-items: flex-end;
         }
 
+
+
+
+
         .order-time {
             font-size: 1.1rem;
             color: rgba(255, 255, 255, 0.75);
             font-weight: 600;
-            font-variant-numeric: tabular-nums;
         }
 
         /* Order Type */
@@ -316,7 +322,7 @@
         .btn-ready {
             width: 100%;
             padding: 14px;
-            background: var(--success);
+            background:var(--success);
             color: var(--text-primary);
             border: none;
             font-size: 1rem;
@@ -329,6 +335,7 @@
             justify-content: center;
             gap: 8px;
         }
+
 
         .btn-ready:disabled {
             background: rgba(255, 255, 255, 0.5);
@@ -404,6 +411,13 @@
 </head>
 
 <body>
+    <!-- <div class="start-overlay" id="startOverlay">
+        <div class="logo-icon">👨‍🍳</div>
+        <h1>Smart Food</h1>
+        <p class="start-subtitle">Oshxona paneli</p>
+        <button class="start-btn">Boshlash</button>
+    </div> -->
+
     <header class="header">
         <div class="header-left">
             <div class="logo">
@@ -433,8 +447,6 @@
 
     <script>
         const knownOrders = new Set();
-        // Store order creation times for live timer updates
-        const orderCreatedTimes = new Map();
         let isFirstLoad = true;
         let audioCtx = null;
 
@@ -525,36 +537,19 @@
             return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
         }
 
-        // NEW: Update all order timers every second
-        function updateOrderTimers() {
-            orderCreatedTimes.forEach((createdAt, orderId) => {
-                const timerElement = document.querySelector(`.order-card[data-id="${orderId}"] .order-time`);
-                if (timerElement) {
-                    timerElement.textContent = timeAgo(createdAt);
-                }
-            });
-        }
-        
-        // Run timer update every second
-        setInterval(updateOrderTimers, 1000);
 
         async function markReady(orderId, btn) {
             btn.disabled = true;
             btn.textContent = '⏳ Kutib turing...';
 
             try {
-                // For demo purposes, simulate the API call
-                // In production, replace this with your actual API endpoint
-                // const res = await fetch(`/api/chef/mark-ready/${orderId}`, {
-                //     method: 'POST',
-                //     headers: {
-                //         'Content-Type': 'application/json',
-                //         'X-CSRFToken': 'your-csrf-token'
-                //     }
-                // });
-
-                // Simulated success for demo
-                const res = { ok: true };
+                const res = await fetch(`{% url "client:chef_mark_ready" order_id=0 %}`.replace('0', orderId), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    }
+                });
 
                 if (res.ok) {
                     const card = btn.closest('.order-card');
@@ -564,7 +559,6 @@
                     setTimeout(() => {
                         card.remove();
                         knownOrders.delete(orderId);
-                        orderCreatedTimes.delete(orderId); // Remove from timer tracking
                         updateOrderCount();
                         checkEmpty();
                     }, 400);
@@ -604,9 +598,6 @@
         };
 
         function createOrderCard(order) {
-            // Store the created_at time for live updates
-            orderCreatedTimes.set(order.id, order.created_at);
-            
             const items = order.items.map(item => `
                 <div class="item">
                     <div class="item-row">
@@ -635,8 +626,6 @@
                 </div>
             `;
         }
-
-        // Demo data for testing - remove this in productio
 
         async function fetchOrders() {
             try {
@@ -680,6 +669,14 @@
                 console.error(e);
             }
         }
+
+        // document.getElementById('startOverlay').addEventListener('click', () => {
+        //     unlockAudio();
+        //     playSound();
+        //     enterFullscreen();
+        //     document.getElementById('startOverlay').classList.add('hidden');
+        // });
+
         fetchOrders();
         setInterval(fetchOrders, 3000);
     </script>
