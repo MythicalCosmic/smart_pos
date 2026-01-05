@@ -1,5 +1,5 @@
 import jwt
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from django.conf import settings
 from django.contrib.auth.hashers import make_password, check_password
 from django.core.exceptions import ValidationError
@@ -45,7 +45,7 @@ class AuthService:
                 )
                 
                 User.objects.filter(id=user.id).update(
-                    last_login_at=timezone.now(),
+                    last_login_at=datetime.now().date(),
                     last_login_api=ip_address
                 )
             
@@ -82,7 +82,7 @@ class AuthService:
             )
             
             User.objects.filter(id=user.id).update(
-                last_login_at=timezone.now(),
+                last_login_at=datetime.now().date(),
                 last_login_api=ip_address
             )
             
