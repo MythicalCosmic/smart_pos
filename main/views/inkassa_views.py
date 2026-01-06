@@ -10,7 +10,6 @@ from rest_framework.decorators import api_view
 @api_view(["GET"])
 @user_required
 def get_cash_balance(request):
-    """Get current cash register balance"""
     result = InkassaService.get_current_balance()
     return APIResponse.success(data=result)
 
@@ -19,7 +18,6 @@ def get_cash_balance(request):
 @api_view(["GET"])
 @user_required
 def get_current_stats(request):
-    """Get statistics for current period (since last inkassa)"""
     result = InkassaService.get_current_period_stats()
     return APIResponse.success(data=result)
 
@@ -28,26 +26,19 @@ def get_current_stats(request):
 @api_view(["POST"])
 @user_required
 def perform_inkassa(request):
-    """
-    Perform inkassa (cash withdrawal)
-    Body can include:
-    - amount: specific amount to withdraw (optional, defaults to all cash)
-    - notes: any notes about this inkassa (optional)
-    """
     data, error = parse_json_body(request)
     if error:
         data = {}
     
     user = request.user
     
-    # Only cashiers and admins can perform inkassa
     if user.role not in ['CASHIER', 'ADMIN']:
         return APIResponse.error(
             message='Only cashiers and admins can perform inkassa',
             status_code=403
         )
     
-    amount = data.get('amount')  # None means take all
+    amount = data.get('amount') 
     notes = data.get('notes')
     
     result = InkassaService.perform_inkassa(
@@ -69,7 +60,6 @@ def perform_inkassa(request):
 @api_view(["GET"])
 @user_required
 def get_inkassa_history(request):
-    """Get history of all inkassas"""
     page = int(request.GET.get('page', 1))
     per_page = int(request.GET.get('per_page', 20))
     
@@ -81,7 +71,6 @@ def get_inkassa_history(request):
 @api_view(["GET"])
 @user_required
 def get_inkassa(request, inkassa_id):
-    """Get details of a specific inkassa"""
     result = InkassaService.get_inkassa_by_id(inkassa_id)
     
     if result['success']:

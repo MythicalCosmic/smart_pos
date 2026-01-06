@@ -22,7 +22,6 @@ from django.utils import timezone
 from django.utils.safestring import mark_safe
 
 
-# Custom Date Filter classes with form_class
 class CustomRangeDateFilter(RangeDateFilter):
     pass
 
@@ -49,7 +48,6 @@ class OrderItemInline(TabularInline):
 
 
 class UserAdminForm(forms.ModelForm):
-    """Custom form for User model with password handling"""
     password = forms.CharField(
         label=_("Password"),
         widget=forms.PasswordInput(attrs={
@@ -66,7 +64,6 @@ class UserAdminForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # If editing existing user, make password optional
         if self.instance and self.instance.pk:
             self.fields['password'].required = False
             self.fields['password'].help_text = _(
@@ -74,29 +71,23 @@ class UserAdminForm(forms.ModelForm):
             )
             self.fields['password'].widget.attrs['placeholder'] = 'Leave blank to keep current password'
         else:
-            # For new user, password is required
             self.fields['password'].required = True
             self.fields['password'].help_text = _("Enter a strong password for the new user.")
     
     def clean_password(self):
-        """Clean and validate password"""
         password = self.cleaned_data.get('password')
         
-        # If editing and password is empty, return None (don't change password)
         if self.instance.pk and not password:
             return None
         
-        # Validate password length
         if password and len(password) < 4:
             raise forms.ValidationError(_("Password must be at least 4 characters long."))
         
         return password
     
     def save(self, commit=True):
-        """Override save to hash password"""
         user = super().save(commit=False)
         
-        # Hash password if provided
         password = self.cleaned_data.get('password')
         if password:
             user.password = make_password(password)
@@ -171,19 +162,16 @@ class SessionAdmin(ModelAdmin):
 
 
 class MultiColorWidget(forms.Widget):
-    """Custom widget showing color bars with color pickers"""
     
-    template_name = None  # We override render completely
+    template_name = None 
     
     def render(self, name, value, attrs=None, renderer=None):
         widget_id = attrs.get('id', name) if attrs else name
         
-        # Parse existing colors
         colors = []
         if value:
             colors = [c.strip() for c in value.split(',') if c.strip() and c.strip().startswith('#')]
         
-        # Build color picker bars
         color_inputs = ''
         for i, color in enumerate(colors):
             color_inputs += f'''
@@ -252,7 +240,6 @@ class MultiColorWidget(forms.Widget):
 
 
 class CategoryAdminForm(forms.ModelForm):
-    # Text field for color input - will be converted to list
     colors_input = forms.CharField(
         required=False,
         help_text=_("Ranglarni vergul bilan ajrating, masalan: #e74c3c, #3498db, #27ae60"),
@@ -265,25 +252,20 @@ class CategoryAdminForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Convert list to comma-separated string for display
         if self.instance and self.instance.pk and self.instance.colors:
             self.fields['colors_input'].initial = ', '.join(self.instance.colors)
     
     def clean_colors_input(self):
-        """Convert comma-separated string to list of colors"""
         colors_str = self.cleaned_data.get('colors_input', '')
         if not colors_str:
             return []
         
-        # Parse and validate colors
         colors = []
         for color in colors_str.split(','):
             color = color.strip()
             if color:
-                # Add # if missing
                 if not color.startswith('#'):
                     color = f'#{color}'
-                # Validate hex color format
                 if len(color) in [4, 7] and all(c in '0123456789abcdefABCDEF#' for c in color):
                     colors.append(color.lower())
                 else:
@@ -321,7 +303,6 @@ class CategoryAdmin(ModelAdmin):
     
     @display(description=_("Ranglar"))
     def color_bars(self, obj):
-        """Display multiple color bars in a row"""
         if not obj.colors:
             return mark_safe('<span style="color: #999;">—</span>')
         
@@ -348,7 +329,6 @@ class CategoryAdmin(ModelAdmin):
 
 
 class ProductAdminForm(forms.ModelForm):
-    """Custom form for Product model with color picker"""
     colors_input = forms.CharField(
         required=False,
         label=_("Ranglar"),
@@ -362,25 +342,20 @@ class ProductAdminForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Convert list to comma-separated string for display
         if self.instance and self.instance.pk and self.instance.colors:
             self.fields['colors_input'].initial = ', '.join(self.instance.colors)
     
     def clean_colors_input(self):
-        """Convert comma-separated string to list of colors"""
         colors_str = self.cleaned_data.get('colors_input', '')
         if not colors_str:
             return []
         
-        # Parse and validate colors
         colors = []
         for color in colors_str.split(','):
             color = color.strip()
             if color:
-                # Add # if missing
                 if not color.startswith('#'):
                     color = f'#{color}'
-                # Validate hex color format
                 if len(color) in [4, 7] and all(c in '0123456789abcdefABCDEF#' for c in color):
                     colors.append(color.lower())
                 else:
@@ -419,7 +394,6 @@ class ProductAdmin(ModelAdmin):
     
     @display(description=_("Ranglar"))
     def color_bars(self, obj):
-        """Display multiple color bars in a row"""
         if not obj.colors:
             return mark_safe('<span style="color: #999;">—</span>')
         

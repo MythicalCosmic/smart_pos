@@ -51,9 +51,8 @@ def user_required(view_func):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        # ✅ IMPORTANT: Set request.user for DRF
         request.user = user
-        request._dont_enforce_csrf_checks = True  # Skip CSRF for API
+        request._dont_enforce_csrf_checks = True  
         
         return view_func(request, *args, **kwargs)
 

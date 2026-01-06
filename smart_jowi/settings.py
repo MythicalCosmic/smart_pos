@@ -168,7 +168,6 @@ UNFOLD = {
     "SITE_URL": "/",
     "SITE_SYMBOL": "local_cafe",
     
-    # IMPORTANT: Dashboard callback - this is required!
     "DASHBOARD_CALLBACK": "main.utils.dashboard.dashboard_callback",
     
     "SIDEBAR": {

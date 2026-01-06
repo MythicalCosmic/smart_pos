@@ -23,7 +23,6 @@ def dashboard_callback(request, context):
     start_date = None
     end_date = None
     
-    # Parse date_from if provided
     if date_from:
         try:
             hour_from, minute_from = 0, 0
@@ -40,7 +39,6 @@ def dashboard_callback(request, context):
         except (ValueError, IndexError):
             start_date = None
     
-    # Parse date_to if provided
     if date_to:
         try:
             hour_to, minute_to = 23, 59
@@ -57,19 +55,15 @@ def dashboard_callback(request, context):
         except (ValueError, IndexError):
             end_date = None
     
-    # Determine period and interval based on what's provided
     if start_date or end_date:
         period = 'custom'
         
-        # If only start_date, end is now
         if start_date and not end_date:
             end_date = now
         
-        # If only end_date, start is 7 days before
         if end_date and not start_date:
             start_date = end_date - timedelta(days=7)
         
-        # Calculate interval based on date range
         total_seconds = (end_date - start_date).total_seconds()
         hours_diff = total_seconds / 3600
         days_diff = total_seconds / 86400
@@ -101,7 +95,6 @@ def dashboard_callback(request, context):
         end_date = now
         interval = 'day'
     
-    # Create the date filter Q object for orders
     date_filter = Q(created_at__gte=start_date) & Q(created_at__lte=end_date)
     
     cash_register = CashRegister.objects.first()
@@ -161,16 +154,13 @@ def dashboard_callback(request, context):
     try:
         revenue_chart_data = get_revenue_chart_data(start_date, end_date, interval)
     except Exception as e:
-        print(f"Error generating revenue chart: {e}")
         revenue_chart_data = {'labels': [], 'datasets': [{'label': 'Revenue', 'data': []}]}
     
     try:
         orders_chart_data = get_orders_chart_data(start_date, end_date, interval)
     except Exception as e:
-        print(f"Error generating orders chart: {e}")
         orders_chart_data = {'labels': [], 'datasets': [{'label': 'Orders', 'data': []}]}
     
-    # Top products - filtered by date range
     top_products = OrderItem.objects.filter(
         order__created_at__gte=start_date,
         order__created_at__lte=end_date,
@@ -182,7 +172,6 @@ def dashboard_callback(request, context):
         total_revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
     ).order_by('-total_quantity')[:5]
     
-    # Category data - filtered by date range
     category_data = OrderItem.objects.filter(
         order__created_at__gte=start_date,
         order__created_at__lte=end_date,
@@ -193,7 +182,6 @@ def dashboard_callback(request, context):
         revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
     ).order_by('-revenue')
     
-    # Cashier performance - filtered by date range using the same date_filter
     cashier_performance = Order.objects.filter(
         date_filter,
         is_paid=True,
@@ -226,7 +214,6 @@ def dashboard_callback(request, context):
     else:
         period_label = period
     
-    # Format dates for input fields (YYYY-MM-DD format)
     date_from_value = start_date.strftime('%Y-%m-%d') if period == 'custom' and date_from else ''
     date_to_value = end_date.strftime('%Y-%m-%d') if period == 'custom' and date_to else ''
     time_from_value = time_from if period == 'custom' else '00:00'
@@ -241,7 +228,6 @@ def dashboard_callback(request, context):
         'date_to': date_to_value,
         'time_from': time_from_value,
         'time_to': time_to_value,
-        # Display formatted dates for the UI
         'display_date_from': start_date.strftime('%d.%m.%Y') if start_date else '',
         'display_time_from': start_date.strftime('%H:%M') if start_date else '',
         'display_date_to': end_date.strftime('%d.%m.%Y') if end_date else '',
