@@ -45,9 +45,9 @@ class OrderService:
                 queryset = queryset.filter(is_paid=False)
 
         if status:
-            status = status.strip().upper()
-            if status in OrderService.ALLOWED_STATUSES:
-                queryset = queryset.filter(status=status)
+            status = status.strip().lower()
+            queryset = queryset.filter(status__iexact=status)
+
         
         if user_id:
             queryset = queryset.filter(user_id=user_id)
@@ -59,7 +59,6 @@ class OrderService:
         
         paginator = Paginator(queryset, per_page)
         page_obj = paginator.get_page(page)
-        
         orders = []
         for order in page_obj.object_list:
             orders.append({
@@ -81,6 +80,14 @@ class OrderService:
                 'is_paid': order.is_paid,
                 'total_amount': str(order.total_amount),
                 'items_count': order.items.count(),
+                'items': list(order.items.values(
+                    'id',
+                    'product__id',
+                    'product__name',
+                    'quantity',
+                    'price'
+                )),
+                'paid_at': order.paid_at.isoformat() if order.paid_at else None,
                 'created_at': order.created_at.isoformat(),
                 'updated_at': order.updated_at.isoformat()
             })

@@ -73,12 +73,28 @@
                 </div>
             </div>
 
-            {% if period == 'custom' %}
-            <div class="px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg border border-indigo-200 dark:border-indigo-800 inline-flex items-center gap-2 self-start">
-                <span class="material-symbols-outlined text-sm text-indigo-600 dark:text-indigo-400">date_range</span>
-                <p class="text-sm font-medium text-indigo-700 dark:text-indigo-300">{{ period_label }}</p>
+            <!-- Selected Period Display - Always visible -->
+            <div class="px-4 py-3 bg-gradient-to-r {% if period == 'custom' %}from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 border-indigo-200 dark:border-indigo-800{% else %}from-gray-50 to-gray-100 dark:from-gray-800/50 dark:to-gray-700/50 border-gray-200 dark:border-gray-700{% endif %} rounded-lg border inline-flex items-center gap-3 self-start">
+                <span class="material-symbols-outlined text-lg {% if period == 'custom' %}text-indigo-600 dark:text-indigo-400{% else %}text-gray-600 dark:text-gray-400{% endif %}">date_range</span>
+                <div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Showing data for:</p>
+                    <p class="text-sm font-semibold {% if period == 'custom' %}text-indigo-700 dark:text-indigo-300{% else %}text-gray-700 dark:text-gray-300{% endif %}">{{ period_label }}</p>
+                </div>
+                {% if period == 'custom' %}
+                <div class="ml-2 pl-3 border-l border-indigo-200 dark:border-indigo-700">
+                    <div class="flex items-center gap-4 text-xs">
+                        <div>
+                            <span class="text-gray-500 dark:text-gray-400">From:</span>
+                            <span class="font-medium text-indigo-600 dark:text-indigo-400 ml-1">{{ display_date_from }} {{ display_time_from }}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 dark:text-gray-400">To:</span>
+                            <span class="font-medium text-indigo-600 dark:text-indigo-400 ml-1">{{ display_date_to }} {{ display_time_to }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -182,9 +198,14 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             {% component "unfold/components/card.html" %}
-                {% component "unfold/components/title.html" with class="mb-4" %}
-                    Top Products
-                {% endcomponent %}
+                <div class="flex items-center justify-between mb-4">
+                    {% component "unfold/components/title.html" %}
+                        Top Products
+                    {% endcomponent %}
+                    <span class="px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                        {{ period_label }}
+                    </span>
+                </div>
                 <div class="space-y-3">
                     {% for product in top_products %}
                         <div class="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
@@ -202,16 +223,21 @@
                         </div>
                     {% empty %}
                         {% component "unfold/components/text.html" with class="text-gray-400 dark:text-gray-500 text-center py-8" %}
-                            No data available
+                            No data available for selected period
                         {% endcomponent %}
                     {% endfor %}
                 </div>
             {% endcomponent %}
 
             {% component "unfold/components/card.html" %}
-                {% component "unfold/components/title.html" with class="mb-4" %}
-                    Revenue by Category
-                {% endcomponent %}
+                <div class="flex items-center justify-between mb-4">
+                    {% component "unfold/components/title.html" %}
+                        Revenue by Category
+                    {% endcomponent %}
+                    <span class="px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                        {{ period_label }}
+                    </span>
+                </div>
                 <div class="space-y-3">
                     {% for cat in category_data %}
                         <div class="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
@@ -224,16 +250,21 @@
                         </div>
                     {% empty %}
                         {% component "unfold/components/text.html" with class="text-gray-400 dark:text-gray-500 text-center py-8" %}
-                            No data available
+                            No data available for selected period
                         {% endcomponent %}
                     {% endfor %}
                 </div>
             {% endcomponent %}
 
             {% component "unfold/components/card.html" %}
-                {% component "unfold/components/title.html" with class="mb-4" %}
-                    Top Cashiers
-                {% endcomponent %}
+                <div class="flex items-center justify-between mb-4">
+                    {% component "unfold/components/title.html" %}
+                        Top Cashiers
+                    {% endcomponent %}
+                    <span class="px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                        {{ period_label }}
+                    </span>
+                </div>
                 <div class="space-y-3">
                     {% for cashier in cashier_performance %}
                         <div class="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
@@ -251,7 +282,7 @@
                         </div>
                     {% empty %}
                         {% component "unfold/components/text.html" with class="text-gray-400 dark:text-gray-500 text-center py-8" %}
-                            No data available
+                            No data available for selected period
                         {% endcomponent %}
                     {% endfor %}
                 </div>
@@ -260,9 +291,14 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {% component "unfold/components/card.html" %}
-                {% component "unfold/components/title.html" with class="mb-4" %}
-                    Session Stats
-                {% endcomponent %}
+                <div class="flex items-center justify-between mb-4">
+                    {% component "unfold/components/title.html" %}
+                        Session Stats
+                    {% endcomponent %}
+                    <span class="px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                        {{ period_label }}
+                    </span>
+                </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div class="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                         {% component "unfold/components/text.html" with class="text-gray-500 dark:text-gray-400 text-sm mb-1" %}
@@ -284,9 +320,14 @@
             {% endcomponent %}
 
             {% component "unfold/components/card.html" %}
-                {% component "unfold/components/title.html" with class="mb-4" %}
-                    Recent Logins
-                {% endcomponent %}
+                <div class="flex items-center justify-between mb-4">
+                    {% component "unfold/components/title.html" %}
+                        Recent Logins
+                    {% endcomponent %}
+                    <span class="px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                        {{ period_label }}
+                    </span>
+                </div>
                 <div class="space-y-3 max-h-48 overflow-y-auto">
                     {% for login in recent_logins %}
                         <div class="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
@@ -311,7 +352,7 @@
                         </div>
                     {% empty %}
                         {% component "unfold/components/text.html" with class="text-gray-400 dark:text-gray-500 text-center py-8" %}
-                            No recent logins
+                            No recent logins for selected period
                         {% endcomponent %}
                     {% endfor %}
                 </div>
@@ -451,11 +492,23 @@
             }
         }
         input[type="time"] {
-            background-color: grey;
-            
+            background-color: #4b5563;
+            color: white;
         }
         input[type="date"] {
-            background-color: grey;
+            background-color: #4b5563;
+            color: white;
+        }
+        /* Light mode overrides */
+        @media (prefers-color-scheme: light) {
+            input[type="time"] {
+                background-color: white;
+                color: #1f2937;
+            }
+            input[type="date"] {
+                background-color: white;
+                color: #1f2937;
+            }
         }
     </style>
 {% endblock %}
