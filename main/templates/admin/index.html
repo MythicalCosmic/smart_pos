@@ -156,7 +156,7 @@
                                 </span>
                             {% endcomponent %}
                         </div>
-                        <div class="w-12 h-12 rounded-xl {% if card.color == 'green' %}bg-emerald-100 dark:bg-emerald-900/30{% else %}bg-red-100 dark:bg-red-900/30{% endif %} flex items-center justify-center">
+                        <div class="w-12 h-12 rounded-xl {% if card.color == 'green' %}bg-emerald-100 dark:bg-emerald-900/30{% else %} dark:bg-red-900/30{% endif %} flex items-center justify-center">
                             <span class="material-symbols-outlined text-2xl {% if card.color == 'green' %}text-emerald-500{% else %}text-red-500{% endif %}">
                                 {% if card.color == 'green' %}check_circle{% else %}pending{% endif %}
                             </span>
