@@ -2,6 +2,10 @@
 .env.local
 .env.production
 .env.staging
+.venv.development
+.venv.production
+.venv.staging
+.venv 
 .env.test
 __pycache__/
 *.pyc

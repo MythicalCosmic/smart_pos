@@ -36,7 +36,8 @@ class ProductService:
                 'category': {
                     'id': product.category.id,
                     'name': product.category.name,
-                    'slug': product.category.slug
+                    'slug': product.category.slug,
+                    'color': product.category.colors,
                 },
                 'created_at': product.created_at.isoformat(),
                 'updated_at': product.updated_at.isoformat()
