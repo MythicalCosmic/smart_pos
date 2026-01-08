@@ -41,7 +41,6 @@ urlpatterns = [
     path('orders', order_views.list_orders, name='list_orders'),
     path('orders/<int:order_id>', order_views.get_order, name='get_order'),
     path('orders/create', order_views.create_order, name='create_order'),
-    path('orders/category/<int:category_id>', order_views.get_orders_by_category, name='orders_by_category'),
     path('orders/<int:order_id>/add-item', order_views.add_item, name='add_order_item'),
     path('orders/<int:order_id>/items/<int:item_id>/update', order_views.update_item, name='update_order_item'),
     path('orders/<int:order_id>/items/<int:item_id>/remove', order_views.remove_item, name='remove_order_item'),

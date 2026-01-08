@@ -7,7 +7,16 @@ from main.models import Product, Category
 class ProductService:
     
     @staticmethod
-    def get_all_products(page=1, per_page=20, search=None, category_id=None, order_by='-created_at'):
+    def parse_array_param(param):
+        if not param:
+            return None
+        param = param.strip().strip('[]')
+        if not param:
+            return None
+        return [item.strip().strip('"\'') for item in param.split(',') if item.strip()]
+    
+    @staticmethod
+    def get_all_products(page=1, per_page=20, search=None, category_ids=None, order_by='-created_at'):
         
         queryset = Product.objects.select_related('category').all()
         
@@ -16,9 +25,15 @@ class ProductService:
                 Q(name__icontains=search) | 
                 Q(description__icontains=search)
             )
-        
-        if category_id:
-            queryset = queryset.filter(category_id=category_id)
+
+        if category_ids:
+            category_ids_list = ProductService.parse_array_param(category_ids)
+            if category_ids_list:
+                try:
+                    category_ids_int = [int(cid) for cid in category_ids_list]
+                    queryset = queryset.filter(category_id__in=category_ids_int)
+                except ValueError:
+                    pass
         
         queryset = queryset.order_by(order_by)
         
@@ -45,6 +60,10 @@ class ProductService:
         
         result = {
             'products': products,
+            'filters': {
+                'search': search,
+                'category_ids': ProductService.parse_array_param(category_ids),
+            },
             'pagination': {
                 'current_page': page_obj.number,
                 'total_pages': paginator.num_pages,

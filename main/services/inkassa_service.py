@@ -9,7 +9,6 @@ class InkassaService:
     
     @staticmethod
     def get_or_create_cash_register():
-        """Get or create the single cash register instance"""
         register, created = CashRegister.objects.get_or_create(
             id=1,
             defaults={'current_balance': Decimal('0.00')}
@@ -18,7 +17,6 @@ class InkassaService:
     
     @staticmethod
     def get_current_balance():
-        """Get current cash balance"""
         register = InkassaService.get_or_create_cash_register()
         return {
             'success': True,
@@ -29,7 +27,6 @@ class InkassaService:
     @staticmethod
     @transaction.atomic
     def add_to_register(amount):
-        """Add money to cash register (when order is paid)"""
         register = InkassaService.get_or_create_cash_register()
         register.current_balance += Decimal(str(amount))
         register.save()
@@ -37,27 +34,21 @@ class InkassaService:
     
     @staticmethod
     def get_last_inkassa():
-        """Get the most recent inkassa record"""
         last_inkassa = Inkassa.objects.order_by('-created_at').first()
         return last_inkassa
     
     @staticmethod
     def get_period_start():
-        """Get start of current period (since last inkassa or beginning of time)"""
         last_inkassa = InkassaService.get_last_inkassa()
         if last_inkassa:
             return last_inkassa.period_end
-        # If no inkassa ever, start from first order
         first_order = Order.objects.order_by('created_at').first()
         return first_order.created_at if first_order else timezone.now()
     
     @staticmethod
     def get_current_period_stats():
-        """Get statistics for current period (since last inkassa)"""
         period_start = InkassaService.get_period_start()
         register = InkassaService.get_or_create_cash_register()
-        
-        # Get all paid/ready orders in current period
         orders = Order.objects.filter(
             status__in=['PAID', 'READY'],
             updated_at__gte=period_start
@@ -67,17 +58,14 @@ class InkassaService:
         total_revenue = orders.aggregate(
             total=Sum('total_amount')
         )['total'] or Decimal('0.00')
-        
-        # Average order value
+
         avg_order_value = orders.aggregate(
             avg=Avg('total_amount')
         )['avg'] or Decimal('0.00')
-        
-        # Orders by status
+
         paid_orders = orders.filter(status='PAID').count()
         ready_orders = orders.filter(status='READY').count()
-        
-        # Orders by cashier
+
         cashier_stats = orders.values(
             'cashier__first_name', 
             'cashier__last_name',
@@ -86,8 +74,7 @@ class InkassaService:
             order_count=Count('id'),
             total_revenue=Sum('total_amount')
         ).order_by('-order_count')
-        
-        # Top selling products
+
         top_products = OrderItem.objects.filter(
             order__in=orders
         ).values(
@@ -97,8 +84,7 @@ class InkassaService:
             total_quantity=Sum('quantity'),
             total_revenue=Sum(F('price') * F('quantity'))
         ).order_by('-total_quantity')[:10]
-        
-        # Revenue by category
+
         category_revenue = OrderItem.objects.filter(
             order__in=orders
         ).values(
@@ -154,10 +140,6 @@ class InkassaService:
     @staticmethod
     @transaction.atomic
     def perform_inkassa(cashier_id, amount_to_remove=None, notes=None):
-        """
-        Perform inkassa (cash withdrawal from register)
-        If amount_to_remove is None, takes all cash
-        """
         try:
             cashier = User.objects.get(id=cashier_id)
             
@@ -169,19 +151,16 @@ class InkassaService:
             
             register = InkassaService.get_or_create_cash_register()
             period_start = InkassaService.get_period_start()
-            
-            # Get current period stats
+
             stats = InkassaService.get_current_period_stats()
             
             balance_before = register.current_balance
-            
-            # If no amount specified, take all cash
+
             if amount_to_remove is None:
                 amount_to_remove = balance_before
             else:
                 amount_to_remove = Decimal(str(amount_to_remove))
-            
-            # Validate amount
+
             if amount_to_remove > balance_before:
                 return {
                     'success': False,
@@ -195,8 +174,7 @@ class InkassaService:
                 }
             
             balance_after = balance_before - amount_to_remove
-            
-            # Create inkassa record
+
             inkassa = Inkassa.objects.create(
                 cashier=cashier,
                 amount=amount_to_remove,
@@ -207,8 +185,7 @@ class InkassaService:
                 total_revenue=Decimal(stats['summary']['total_revenue']),
                 notes=notes
             )
-            
-            # Update cash register
+
             register.current_balance = balance_after
             register.save()
             
@@ -238,7 +215,6 @@ class InkassaService:
     
     @staticmethod
     def get_inkassa_history(page=1, per_page=20):
-        """Get history of all inkassas"""
         from django.core.paginator import Paginator
         
         inkassas = Inkassa.objects.select_related('cashier').order_by('-created_at')
@@ -284,7 +260,6 @@ class InkassaService:
     
     @staticmethod
     def get_inkassa_by_id(inkassa_id):
-        """Get detailed information about a specific inkassa"""
         try:
             inkassa = Inkassa.objects.select_related('cashier').get(id=inkassa_id)
             

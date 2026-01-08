@@ -14,6 +14,16 @@ from django.db import transaction
 class OrderService:
     
     ALLOWED_STATUSES = ['PREPARING', 'READY', 'CANCELLED']
+
+
+    @staticmethod
+    def parse_array_param(param):
+        if not param:
+            return None
+        param = param.strip().strip('[]')
+        if not param:
+            return None
+        return [item.strip().strip('"\'') for item in param.split(',') if item.strip()]
     
     @staticmethod
     @transaction.atomic
@@ -33,10 +43,11 @@ class OrderService:
     
     
     @staticmethod
-    def get_all_orders(page=1, per_page=20, status=None, payment_status=None, user_id=None, cashier_id=None, order_by='-created_at'):
+    def get_all_orders(page=1, per_page=20, statuses=None, payment_status=None, 
+                       category_ids=None, user_id=None, cashier_id=None, order_by='-created_at'):
         
         queryset = Order.objects.select_related('user', 'cashier').prefetch_related('items__product').all()
-        
+
         if payment_status:
             payment_status = payment_status.strip().upper()
             if payment_status == 'PAID':
@@ -44,11 +55,25 @@ class OrderService:
             elif payment_status == 'UNPAID':
                 queryset = queryset.filter(is_paid=False)
 
-        if status:
-            status = status.strip().lower()
-            queryset = queryset.filter(status__iexact=status)
+        if statuses:
+            statuses_list = OrderService.parse_array_param(statuses)
+            if statuses_list:
+                valid_statuses = [choice[0] for choice in Order.Status.choices]
+                statuses_list = [s.upper() for s in statuses_list if s.upper() in valid_statuses]
+                if statuses_list:
+                    queryset = queryset.filter(status__in=statuses_list)
 
-        
+        if category_ids:
+            category_ids_list = OrderService.parse_array_param(category_ids)
+            if category_ids_list:
+                try:
+                    category_ids_int = [int(cid) for cid in category_ids_list]
+                    queryset = queryset.filter(
+                        items__product__category_id__in=category_ids_int
+                    ).distinct()
+                except ValueError:
+                    pass  
+
         if user_id:
             queryset = queryset.filter(user_id=user_id)
         
@@ -59,6 +84,7 @@ class OrderService:
         
         paginator = Paginator(queryset, per_page)
         page_obj = paginator.get_page(page)
+        
         orders = []
         for order in page_obj.object_list:
             orders.append({
@@ -84,6 +110,8 @@ class OrderService:
                     'id',
                     'product__id',
                     'product__name',
+                    'product__category__id',
+                    'product__category__name',
                     'quantity',
                     'price'
                 )),
@@ -94,6 +122,11 @@ class OrderService:
         
         result = {
             'orders': orders,
+            'filters': {
+                'statuses': OrderService.parse_array_param(statuses),
+                'category_ids': OrderService.parse_array_param(category_ids),
+                'payment_status': payment_status,
+            },
             'pagination': {
                 'current_page': page_obj.number,
                 'total_pages': paginator.num_pages,
@@ -105,44 +138,6 @@ class OrderService:
         }
         return result
     
-
-    @staticmethod
-    def get_orders_by_category(category_id):
-        try:
-            category = Category.objects.get(id=category_id, status='ACTIVE')
-
-            orders = Order.objects.filter(
-            items__product__category=category
-        ).distinct().values(
-            'id',
-            'display_id',
-            'order_type',
-            'status',
-            'description',
-            'phone_number',
-            'total_amount',
-            'is_paid',
-            'paid_at',
-            'ready_at',
-            'created_at',
-            'updated_at',
-            'user_id',
-            'cashier_id',
-        )
-
-
-
-            result = {
-                'success': True, 
-                'caregory': {
-                    'id': category.id,
-                    'name': category.name
-                },
-                'orders': list(orders)
-            }
-            return result   
-        except Category.DoesNotExist:
-            return {'success': False, 'message': 'Category not found'}
 
     @staticmethod
     def get_order_by_id(order_id):

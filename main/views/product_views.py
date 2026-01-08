@@ -13,14 +13,14 @@ def list_products(request):
     page = int(request.GET.get('page', 1))
     per_page = int(request.GET.get('per_page', 20))
     search = request.GET.get('search')
-    category_id = request.GET.get('category_id')
+    category_ids = request.GET.get('category_ids') 
     order_by = request.GET.get('order_by', '-created_at')
     
     result = ProductService.get_all_products(
         page=page,
         per_page=per_page,
         search=search,
-        category_id=category_id,
+        category_ids=category_ids,
         order_by=order_by
     )
     

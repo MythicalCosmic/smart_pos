@@ -13,7 +13,9 @@ def list_orders(request):
     page = int(request.GET.get('page', 1))
     per_page = int(request.GET.get('per_page', 20))
     payment_status = request.GET.get('payment_status')
-    status = request.GET.get('status')
+    statuses = request.GET.get('statuses')
+    category_ids = request.GET.get('category_ids')
+    
     user_id = request.GET.get('user_id')
     cashier_id = request.GET.get('cashier_id')
     order_by = request.GET.get('order_by', '-created_at')
@@ -22,7 +24,8 @@ def list_orders(request):
         page=page,
         per_page=per_page,
         payment_status=payment_status,
-        status=status,
+        statuses=statuses,
+        category_ids=category_ids,
         user_id=user_id,
         cashier_id=cashier_id,
         order_by=order_by
@@ -30,16 +33,6 @@ def list_orders(request):
     
     return APIResponse.success(data=result)
 
-@csrf_exempt
-@api_view(['GET'])
-@user_required
-def get_orders_by_category(request, category_id):
-    result = OrderService.get_orders_by_category(category_id)
-
-    if result['success']:
-        return APIResponse.success(data=result)
-
-    return APIResponse.not_found(message=result['message'])
 
 @csrf_exempt
 @api_view(["GET"])
