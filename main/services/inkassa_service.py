@@ -191,7 +191,7 @@ class InkassaService:
                 
                 return {
                     'success': True,
-                    'message': 'Batch inkassa performed successfully for all payment types',
+                    'message': '  inkassa performed successfully for all payment types',
                     'inkassa': {
                         'batch': True,
                         'cashier': f"{cashier.first_name} {cashier.last_name}",

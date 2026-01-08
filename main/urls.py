@@ -48,6 +48,8 @@ urlpatterns = [
     path('orders/<int:order_id>/pay', order_views.pay_order, name='pay_order'),
     path('orders/<int:order_id>/ready', order_views.mark_ready, name='mark_order_ready'),
     path('orders/<int:order_id>/cancel', order_views.cancel_order, name='cancel_order'),
+    path('orders/<int:order_id>/items/<int:item_id>/ready', order_views.mark_item_ready, name='mark_item_ready'),
+    path('orders/<int:order_id>/items/<int:item_id>/unready', order_views.unmark_item_ready, name='unmark_item_ready'),
     path('orders/stats', order_views.get_stats, name='order_stats'),
 
     path('inkassa/balance', inkassa_views.get_cash_balance, name='cash_balance'),
@@ -59,3 +61,4 @@ urlpatterns = [
     path('display/client', order_views.client_display, name='client_display'),
     path('display/chef', order_views.chef_display, name='chef_display'),
 ]
+

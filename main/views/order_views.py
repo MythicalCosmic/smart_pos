@@ -241,7 +241,49 @@ def mark_ready(request, order_id):
     
     if result['success']:
         return APIResponse.success(
-            data={'status': result.get('status')},
+            data={
+                'status': result.get('status'),
+                'ready_at': result.get('ready_at'),
+                'preparation_time_seconds': result.get('preparation_time_seconds'),
+                'preparation_time_formatted': result.get('preparation_time_formatted')
+            },
+            message=result['message']
+        )
+    
+    return APIResponse.error(message=result['message'])
+
+
+@csrf_exempt
+@api_view(["POST"])
+@user_required
+def mark_item_ready(request, order_id, item_id):
+    result = OrderService.mark_item_ready(order_id, item_id)
+    
+    if result['success']:
+        return APIResponse.success(
+            data={
+                'item': result.get('item'),
+                'order': result.get('order'),
+                'items_status': result.get('items_status')
+            },
+            message=result['message']
+        )
+    
+    return APIResponse.error(message=result['message'])
+
+
+@csrf_exempt
+@api_view(["POST"])
+@user_required
+def unmark_item_ready(request, order_id, item_id):
+    result = OrderService.unmark_item_ready(order_id, item_id)
+    
+    if result['success']:
+        return APIResponse.success(
+            data={
+                'item_id': result.get('item_id'),
+                'order_status': result.get('order_status')
+            },
             message=result['message']
         )
     

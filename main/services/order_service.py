@@ -113,9 +113,11 @@ class OrderService:
                     'product__category__id',
                     'product__category__name',
                     'quantity',
-                    'price'
+                    'price',
+                    'ready_at'
                 )),
                 'paid_at': order.paid_at.isoformat() if order.paid_at else None,
+                'ready_at': order.ready_at,
                 'created_at': order.created_at.isoformat(),
                 'updated_at': order.updated_at.isoformat()
             })
@@ -146,6 +148,10 @@ class OrderService:
             
             items = []
             for item in order.items.all():
+                prep_time = None
+                if item.ready_at:
+                    prep_time = (item.ready_at - order.created_at).total_seconds()
+                
                 items.append({
                     'id': item.id,
                     'product': {
@@ -155,8 +161,16 @@ class OrderService:
                     },
                     'quantity': item.quantity,
                     'price': str(item.price),
-                    'subtotal': str(item.price * item.quantity)
+                    'subtotal': str(item.price * item.quantity),
+                    'ready_at': item.ready_at.isoformat() if item.ready_at else None,
+                    'is_ready': item.ready_at is not None,
+                    'preparation_time_seconds': prep_time,
+                    'preparation_time_formatted': OrderService._format_duration(prep_time) if prep_time else None
                 })
+            
+            order_prep_time = None
+            if order.ready_at:
+                order_prep_time = (order.ready_at - order.created_at).total_seconds()
             
             result = {
                 'success': True,
@@ -180,15 +194,35 @@ class OrderService:
                     'paid_at': order.paid_at.isoformat() if order.paid_at else None,
                     'total_amount': str(order.total_amount),
                     'items': items,
+                    'items_ready_count': sum(1 for item in items if item['is_ready']),
+                    'items_total_count': len(items),
                     'created_at': order.created_at.isoformat(),
                     'updated_at': order.updated_at.isoformat(),
-                    'ready_at': order.ready_at.isoformat() if order.ready_at else None
+                    'ready_at': order.ready_at.isoformat() if order.ready_at else None,
+                    'preparation_time_seconds': order_prep_time,
+                    'preparation_time_formatted': OrderService._format_duration(order_prep_time) if order_prep_time else None
                 }
             }
             
             return result
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
+    
+    @staticmethod
+    def _format_duration(seconds):
+        if seconds is None:
+            return None
+        
+        seconds = int(seconds)
+        hours, remainder = divmod(seconds, 3600)
+        minutes, secs = divmod(remainder, 60)
+        
+        if hours > 0:
+            return f"{hours}h {minutes}m {secs}s"
+        elif minutes > 0:
+            return f"{minutes}m {secs}s"
+        else:
+            return f"{secs}s"
     
     @staticmethod
     @transaction.atomic
@@ -240,7 +274,8 @@ class OrderService:
                     product=product,
                     detail=detail,
                     quantity=quantity,
-                    price=product.price
+                    price=product.price,
+                    ready_at=None 
                 )
                 
                 total_amount += product.price * quantity
@@ -269,7 +304,7 @@ class OrderService:
             
             product = Product.objects.get(id=product_id)
             
-            existing_item = OrderItem.objects.filter(order=order, product=product).first()
+            existing_item = OrderItem.objects.filter(order=order, product=product, ready_at__isnull=True).first()
             
             if existing_item:
                 existing_item.quantity += quantity
@@ -279,8 +314,14 @@ class OrderService:
                     order=order,
                     product=product,
                     quantity=quantity,
-                    price=product.price
+                    price=product.price,
+                    ready_at=None
                 )
+
+            if order.ready_at:
+                order.ready_at = None
+                order.status = 'PREPARING'
+                order.save(update_fields=['ready_at', 'status'])
             
             OrderService._recalculate_order_total(order)
             
@@ -334,7 +375,8 @@ class OrderService:
             if order.items.count() == 0:
                 order.delete()
                 return {'success': True, 'message': 'Order deleted (no items remaining)'}
-            
+
+            OrderService._check_and_update_order_ready_status(order)
             OrderService._recalculate_order_total(order)
             
             return {'success': True, 'message': 'Item removed from order successfully'}
@@ -363,6 +405,7 @@ class OrderService:
 
             if status == 'READY':
                 order.ready_at = timezone.now()
+                order.items.filter(ready_at__isnull=True).update(ready_at=timezone.now())
 
             if cashier_id is not None:
                 order.cashier_id = cashier_id
@@ -390,6 +433,129 @@ class OrderService:
                 'success': False,
                 'message': f'Failed to update status: {str(e)}'
             }
+
+    @staticmethod
+    @transaction.atomic
+    def mark_item_ready(order_id, item_id):
+        try:
+            order = Order.objects.get(id=order_id)
+            
+            if order.status == 'CANCELLED':
+                return {'success': False, 'message': 'Cannot modify cancelled order'}
+            
+            if order.status == 'READY':
+                return {'success': False, 'message': 'Order is already marked as ready'}
+            
+            item = OrderItem.objects.get(id=item_id, order=order)
+            
+            if item.ready_at is not None:
+                return {'success': False, 'message': 'Item is already marked as ready'}
+            
+            now = timezone.now()
+            item.ready_at = now
+            item.save(update_fields=['ready_at'])
+            
+            item_prep_time = (item.ready_at - order.created_at).total_seconds()
+            
+            all_items_ready, order_ready = OrderService._check_and_update_order_ready_status(order)
+            
+            order_prep_time = None
+            if order_ready and order.ready_at:
+                order_prep_time = (order.ready_at - order.created_at).total_seconds()
+
+            items_status = []
+            for order_item in order.items.all():
+                prep_time = None
+                if order_item.ready_at:
+                    prep_time = (order_item.ready_at - order.created_at).total_seconds()
+                items_status.append({
+                    'id': order_item.id,
+                    'product_name': order_item.product.name,
+                    'quantity': order_item.quantity,
+                    'is_ready': order_item.ready_at is not None,
+                    'ready_at': order_item.ready_at.isoformat() if order_item.ready_at else None,
+                    'preparation_time_seconds': prep_time,
+                    'preparation_time_formatted': OrderService._format_duration(prep_time) if prep_time else None
+                })
+            
+            return {
+                'success': True,
+                'message': 'Item marked as ready',
+                'item': {
+                    'id': item.id,
+                    'product_name': item.product.name,
+                    'ready_at': item.ready_at.isoformat(),
+                    'preparation_time_seconds': item_prep_time,
+                    'preparation_time_formatted': OrderService._format_duration(item_prep_time)
+                },
+                'order': {
+                    'id': order.id,
+                    'display_id': order.display_id,
+                    'status': order.status,
+                    'all_items_ready': all_items_ready,
+                    'ready_at': order.ready_at.isoformat() if order.ready_at else None,
+                    'preparation_time_seconds': order_prep_time,
+                    'preparation_time_formatted': OrderService._format_duration(order_prep_time) if order_prep_time else None
+                },
+                'items_status': items_status
+            }
+            
+        except Order.DoesNotExist:
+            return {'success': False, 'message': 'Order not found'}
+        except OrderItem.DoesNotExist:
+            return {'success': False, 'message': 'Order item not found'}
+        except Exception as e:
+            return {'success': False, 'message': f'Failed to mark item as ready: {str(e)}'}
+    
+    @staticmethod
+    @transaction.atomic
+    def unmark_item_ready(order_id, item_id):
+        try:
+            order = Order.objects.get(id=order_id)
+            
+            if order.status == 'CANCELLED':
+                return {'success': False, 'message': 'Cannot modify cancelled order'}
+            
+            item = OrderItem.objects.get(id=item_id, order=order)
+            
+            if item.ready_at is None:
+                return {'success': False, 'message': 'Item is not marked as ready'}
+            
+            item.ready_at = None
+            item.save(update_fields=['ready_at'])
+            if order.status == 'READY':
+                order.status = 'PREPARING'
+                order.ready_at = None
+                order.save(update_fields=['status', 'ready_at'])
+            
+            return {
+                'success': True,
+                'message': 'Item unmarked as ready',
+                'item_id': item.id,
+                'order_status': order.status
+            }
+            
+        except Order.DoesNotExist:
+            return {'success': False, 'message': 'Order not found'}
+        except OrderItem.DoesNotExist:
+            return {'success': False, 'message': 'Order item not found'}
+        except Exception as e:
+            return {'success': False, 'message': f'Failed to unmark item: {str(e)}'}
+    
+    @staticmethod
+    def _check_and_update_order_ready_status(order):
+        total_items = order.items.count()
+        ready_items = order.items.filter(ready_at__isnull=False).count()
+        
+        all_items_ready = total_items > 0 and total_items == ready_items
+        
+        if all_items_ready and order.status != 'READY':
+            order.status = 'READY'
+            order.ready_at = timezone.now()
+            order.save(update_fields=['status', 'ready_at'])
+            return True, True
+        
+        return all_items_ready, False
 
     @staticmethod
     @transaction.atomic
@@ -430,11 +596,23 @@ class OrderService:
             if order.status == 'READY':
                 return {'success': False, 'message': 'Order is already ready'}
             
+            now = timezone.now()
             order.status = 'READY'
-            order.ready_at = timezone.now()
+            order.ready_at = now
             order.save(update_fields=['status', 'ready_at'])
+
+            order.items.filter(ready_at__isnull=True).update(ready_at=now)
+
+            order_prep_time = (order.ready_at - order.created_at).total_seconds()
             
-            return {'success': True, 'message': 'Order marked as ready', 'status': order.status}
+            return {
+                'success': True, 
+                'message': 'Order marked as ready', 
+                'status': order.status,
+                'ready_at': order.ready_at.isoformat(),
+                'preparation_time_seconds': order_prep_time,
+                'preparation_time_formatted': OrderService._format_duration(order_prep_time)
+            }
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
         except Exception as e:
@@ -446,7 +624,7 @@ class OrderService:
 
         processing = Order.objects.filter(
             status='PREPARING'
-        ).select_related('user').order_by('created_at')
+        ).select_related('user').prefetch_related('items').order_by('created_at')
 
         finished = Order.objects.filter(
             status='READY',
@@ -455,6 +633,9 @@ class OrderService:
         
         processing_list = []
         for order in processing:
+            total_items = order.items.count()
+            ready_items = order.items.filter(ready_at__isnull=False).count()
+            
             processing_list.append({
                 'id': order.id,
                 'display_id': order.display_id,
@@ -462,18 +643,27 @@ class OrderService:
                 'total_amount': str(order.total_amount),
                 'status': order.status,
                 'is_paid': order.is_paid,
+                'items_ready': ready_items,
+                'items_total': total_items,
+                'progress_percent': round((ready_items / total_items * 100) if total_items > 0 else 0, 1),
                 'created_at': order.created_at.isoformat()
             })
         
         finished_list = []
         for order in finished:
+            order_prep_time = None
+            if order.ready_at:
+                order_prep_time = (order.ready_at - order.created_at).total_seconds()
+            
             finished_list.append({
                 'id': order.id,
                 'display_id': order.display_id,
                 'user': f"{order.user.first_name} {order.user.last_name}",
                 'total_amount': str(order.total_amount),
                 'is_paid': order.is_paid,
-                'completed_at': order.ready_at.isoformat()
+                'completed_at': order.ready_at.isoformat(),
+                'preparation_time_seconds': order_prep_time,
+                'preparation_time_formatted': OrderService._format_duration(order_prep_time) if order_prep_time else None
             })
         
         result = {
@@ -493,12 +683,28 @@ class OrderService:
         orders_list = []
         for order in orders:
             items = []
+            ready_count = 0
             for item in order.items.all():
+                is_ready = item.ready_at is not None
+                if is_ready:
+                    ready_count += 1
+                
+                prep_time = None
+                if item.ready_at:
+                    prep_time = (item.ready_at - order.created_at).total_seconds()
+                
                 items.append({
+                    'id': item.id,
                     'product_name': item.product.name,
-                    'quantity': item.quantity
+                    'quantity': item.quantity,
+                    'detail': item.detail,
+                    'is_ready': is_ready,
+                    'ready_at': item.ready_at.isoformat() if item.ready_at else None,
+                    'preparation_time_seconds': prep_time,
+                    'preparation_time_formatted': OrderService._format_duration(prep_time) if prep_time else None
                 })
             
+            total_items = len(items)
             orders_list.append({
                 'id': order.id,
                 'display_id': order.display_id,
@@ -506,6 +712,9 @@ class OrderService:
                 'total_amount': str(order.total_amount),
                 'is_paid': order.is_paid,
                 'items': items,
+                'items_ready': ready_count,
+                'items_total': total_items,
+                'progress_percent': round((ready_count / total_items * 100) if total_items > 0 else 0, 1),
                 'created_at': order.created_at.isoformat()
             })
         
@@ -529,6 +738,22 @@ class OrderService:
             total=Sum('total_amount')
         )['total'] or Decimal('0.00')
         
+        completed_orders = Order.objects.filter(
+            status='READY',
+            ready_at__isnull=False
+        )
+        
+        avg_prep_time = None
+        if completed_orders.exists():
+            total_prep_time = 0
+            count = 0
+            for order in completed_orders:
+                prep_time = (order.ready_at - order.created_at).total_seconds()
+                total_prep_time += prep_time
+                count += 1
+            if count > 0:
+                avg_prep_time = total_prep_time / count
+        
         result = {
             'success': True,
             'stats': {
@@ -538,7 +763,9 @@ class OrderService:
                 'cancelled_orders': cancelled_orders,
                 'paid_orders': paid_orders,
                 'unpaid_orders': unpaid_orders,
-                'total_revenue': str(total_revenue)
+                'total_revenue': str(total_revenue),
+                'average_preparation_time_seconds': avg_prep_time,
+                'average_preparation_time_formatted': OrderService._format_duration(avg_prep_time) if avg_prep_time else None
             }
         }
         return result
