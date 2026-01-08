@@ -139,7 +139,7 @@ class InkassaService:
     
     @staticmethod
     @transaction.atomic
-    def perform_inkassa(cashier_id, amount_to_remove=None, notes=None):
+    def perform_inkassa(cashier_id, amount_to_remove=None, inkass_type=None, notes=None):
         try:
             cashier = User.objects.get(id=cashier_id)
             
@@ -151,11 +151,64 @@ class InkassaService:
             
             register = InkassaService.get_or_create_cash_register()
             period_start = InkassaService.get_period_start()
-
             stats = InkassaService.get_current_period_stats()
-            
             balance_before = register.current_balance
 
+            if inkass_type == 'ALL':
+                inkassa_types = ['CASH', 'UZCARD', 'HUMO', 'PAYME']
+                created_inkassas = []
+                
+                for itype in inkassa_types:
+                    type_amount = amount_to_remove / len(inkassa_types) if amount_to_remove else balance_before / len(inkassa_types)
+                    
+                    inkassa = Inkassa.objects.create(
+                        cashier=cashier,
+                        amount=type_amount,
+                        inkass_type=itype,
+                        balance_before=balance_before,
+                        balance_after=Decimal('0'), 
+                        period_start=period_start,
+                        total_orders=stats['summary']['total_orders'],
+                        total_revenue=Decimal(stats['summary']['total_revenue']),
+                        notes=notes
+                    )
+                    created_inkassas.append({
+                        'id': inkassa.id,
+                        'type': itype,
+                        'amount': str(type_amount)
+                    })
+                
+                if amount_to_remove is None:
+                    amount_to_remove = balance_before
+                else:
+                    amount_to_remove = Decimal(str(amount_to_remove))
+                    
+                balance_after = balance_before - amount_to_remove
+                register.current_balance = balance_after
+                register.save()
+            
+                Inkassa.objects.filter(id__in=[i['id'] for i in created_inkassas]).update(balance_after=balance_after)
+                
+                return {
+                    'success': True,
+                    'message': 'Batch inkassa performed successfully for all payment types',
+                    'inkassa': {
+                        'batch': True,
+                        'cashier': f"{cashier.first_name} {cashier.last_name}",
+                        'total_amount_removed': str(amount_to_remove),
+                        'balance_before': str(balance_before),
+                        'balance_after': str(balance_after),
+                        'inkassas': created_inkassas,
+                        'period_covered': {
+                            'start': period_start.isoformat(),
+                            'end': timezone.now().isoformat()
+                        },
+                        'statistics': {
+                            'total_orders': stats['summary']['total_orders'],
+                            'total_revenue': str(stats['summary']['total_revenue'])
+                        }
+                    }
+                }
             if amount_to_remove is None:
                 amount_to_remove = balance_before
             else:
@@ -178,6 +231,7 @@ class InkassaService:
             inkassa = Inkassa.objects.create(
                 cashier=cashier,
                 amount=amount_to_remove,
+                inkass_type=inkass_type,
                 balance_before=balance_before,
                 balance_after=balance_after,
                 period_start=period_start,
@@ -195,6 +249,7 @@ class InkassaService:
                 'inkassa': {
                     'id': inkassa.id,
                     'cashier': f"{cashier.first_name} {cashier.last_name}",
+                    'inkass_type': inkass_type,
                     'amount_removed': str(amount_to_remove),
                     'balance_before': str(balance_before),
                     'balance_after': str(balance_after),

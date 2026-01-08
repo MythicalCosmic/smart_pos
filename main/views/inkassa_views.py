@@ -40,10 +40,25 @@ def perform_inkassa(request):
     
     amount = data.get('amount') 
     notes = data.get('notes')
+    inkass_type = data.get('inkass_type')  
+    
+    if not inkass_type:
+        return APIResponse.error(
+            message='inkass_type is required (CASH, UZCARD, HUMO, PAYME, or ALL)',
+            status_code=400
+        )
+    
+    valid_types = ['CASH', 'UZCARD', 'HUMO', 'PAYME', 'ALL']
+    if inkass_type.upper() not in valid_types:
+        return APIResponse.error(
+            message=f'Invalid inkass_type. Must be one of: {", ".join(valid_types)}',
+            status_code=400
+        )
     
     result = InkassaService.perform_inkassa(
         cashier_id=user.id,
         amount_to_remove=amount,
+        inkass_type=inkass_type.upper(),
         notes=notes
     )
     
