@@ -91,11 +91,6 @@ def create_order(request):
                 errors={'phone_number': 'Phone number is required for delivery orders'},
                 message='Phone number required for delivery'
             )
-        if not description:
-            return APIResponse.validation_error(
-                errors={'description': 'Delivery address is required'},
-                message='Delivery address required'
-            )
     
     for idx, item in enumerate(items):
         if 'product_id' not in item:
