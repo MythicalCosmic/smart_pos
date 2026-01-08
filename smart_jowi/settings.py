@@ -253,39 +253,39 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
 
-    'formatters': {
-        'verbose': {
-            'format': '[{asctime}] {levelname} {name}: {message}',
-            'style': '{',
-        },
-    },
+#     'formatters': {
+#         'verbose': {
+#             'format': '[{asctime}] {levelname} {name}: {message}',
+#             'style': '{',
+#         },
+#     },
 
-    'handlers': {
-        'file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logger' / 'logs.txt',
-            'formatter': 'verbose',
-        },
-    },
+#     'handlers': {
+#         'file': {
+#             'level': 'DEBUG',
+#             'class': 'logging.FileHandler',
+#             'filename': BASE_DIR / 'logger' / 'logs.txt',
+#             'formatter': 'verbose',
+#         },
+#     },
 
-    'root': {
-        'handlers': ['file'],
-        'level': 'DEBUG',
-    },
+#     'root': {
+#         'handlers': ['file'],
+#         'level': 'DEBUG',
+#     },
 
-    'loggers': {
-        'django.db.backends': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-    },
-}
+#     'loggers': {
+#         'django.db.backends': {
+#             'handlers': ['file'],
+#             'level': 'DEBUG',
+#             'propagate': False,
+#         },
+#     },
+# }
 
 
 TIME_ZONE = 'Asia/Tashkent'

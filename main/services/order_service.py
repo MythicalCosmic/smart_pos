@@ -3,7 +3,7 @@ from django.core.paginator import Paginator
 from django.core.cache import cache
 from django.db import transaction
 from decimal import Decimal
-from main.models import Order, OrderItem, Product, User
+from main.models import Order, OrderItem, Product, User, Category
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models.functions import Coalesce
@@ -30,7 +30,7 @@ class OrderService:
             return 1
 
         return (last.display_id % 100) + 1
-
+    
     
     @staticmethod
     def get_all_orders(page=1, per_page=20, status=None, payment_status=None, user_id=None, cashier_id=None, order_by='-created_at'):
@@ -105,6 +105,45 @@ class OrderService:
         }
         return result
     
+
+    @staticmethod
+    def get_orders_by_category(category_id):
+        try:
+            category = Category.objects.get(id=category_id, status='ACTIVE')
+
+            orders = Order.objects.filter(
+            items__product__category=category
+        ).distinct().values(
+            'id',
+            'display_id',
+            'order_type',
+            'status',
+            'description',
+            'phone_number',
+            'total_amount',
+            'is_paid',
+            'paid_at',
+            'ready_at',
+            'created_at',
+            'updated_at',
+            'user_id',
+            'cashier_id',
+        )
+
+
+
+            result = {
+                'success': True, 
+                'caregory': {
+                    'id': category.id,
+                    'name': category.name
+                },
+                'orders': list(orders)
+            }
+            return result   
+        except Category.DoesNotExist:
+            return {'success': False, 'message': 'Category not found'}
+
     @staticmethod
     def get_order_by_id(order_id):
         try:

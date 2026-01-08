@@ -30,6 +30,16 @@ def list_orders(request):
     
     return APIResponse.success(data=result)
 
+@csrf_exempt
+@api_view(['GET'])
+@user_required
+def get_orders_by_category(request, category_id):
+    result = OrderService.get_orders_by_category(category_id)
+
+    if result['success']:
+        return APIResponse.success(data=result)
+
+    return APIResponse.not_found(message=result['message'])
 
 @csrf_exempt
 @api_view(["GET"])
