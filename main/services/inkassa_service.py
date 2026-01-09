@@ -286,6 +286,7 @@ class InkassaService:
                     'name': f"{inkassa.cashier.first_name} {inkassa.cashier.last_name}" if inkassa.cashier else 'Unknown'
                 },
                 'amount': str(inkassa.amount),
+                'type': inkassa.inkass_type,
                 'balance_before': str(inkassa.balance_before),
                 'balance_after': str(inkassa.balance_after),
                 'period': {

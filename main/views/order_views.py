@@ -63,6 +63,7 @@ def create_order(request):
     phone_number = data.get('phone_number')
     description = data.get('description')
     details = [item.get('detail') for item in items if 'detail' in item]
+    delivery_person_id = data.get('delivery_person_id')
 
 
     
@@ -78,11 +79,11 @@ def create_order(request):
             message='Invalid order type'
         )
     
-    if order_type == 'DELIVERY':
-        if not phone_number:
+    if order_type == 'DELIVERY' and not delivery_person_id:
+       if not delivery_person_id:
             return APIResponse.validation_error(
-                errors={'phone_number': 'Phone number is required for delivery orders'},
-                message='Phone number required for delivery'
+                errors={'delivery_person_id': 'Delivery person ID is required for delivery orders'},
+             message='Delivery Person ID required for delivery'
             )
     
     for idx, item in enumerate(items):
@@ -104,7 +105,8 @@ def create_order(request):
         phone_number=phone_number,
         description=description,
         detail=[details[idx] for idx in range(len(details))] if details else None,
-        cashier_id=cashier_id
+        cashier_id=cashier_id,\
+        delivery_person_id=delivery_person_id
     )
     
     if result['success']:

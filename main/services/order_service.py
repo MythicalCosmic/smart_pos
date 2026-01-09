@@ -3,7 +3,7 @@ from django.core.paginator import Paginator
 from django.core.cache import cache
 from django.db import transaction
 from decimal import Decimal
-from main.models import Order, OrderItem, Product, User, Category
+from main.models import Order, OrderItem, Product, User, Category, DeliveryPerson
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models.functions import Coalesce
@@ -226,7 +226,7 @@ class OrderService:
     
     @staticmethod
     @transaction.atomic
-    def create_order(user_id, items, order_type='HALL', phone_number=None, description=None, cashier_id=None, detail=None):
+    def create_order(user_id, items, order_type='HALL', phone_number=None, description=None, cashier_id=None, detail=None, delivery_person_id=None):
         try:
             if not User.objects.filter(id=user_id).exists():
                 return {'success': False, 'message': 'User not found'}
@@ -241,6 +241,16 @@ class OrderService:
                 return {'success': False, 'message': 'Invalid order type. Must be HALL, DELIVERY, or PICKUP'}
 
             display_id = OrderService._get_next_display_id()
+
+            delivery_person = None
+            if delivery_person_id:
+                try:
+                    delivery_person = DeliveryPerson.objects.get(id=delivery_person_id)
+                except DeliveryPerson.DoesNotExist:
+                    return {
+                        'success': False,
+                        'message': 'Delivery person not found'
+                    }
             
             order = Order.objects.create(
                 user_id=user_id,
@@ -251,7 +261,8 @@ class OrderService:
                 description=description,
                 status='PREPARING',
                 is_paid=False,
-                total_amount=0
+                total_amount=0,
+                delivery_person=delivery_person
             )
             
             total_amount = Decimal('0.00')

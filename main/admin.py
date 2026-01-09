@@ -16,7 +16,7 @@ from unfold.contrib.filters.admin import (
     SingleNumericFilter,
     TextFilter,
 )
-from .models import User, Session, Category, Product, Order, OrderItem, CashRegister, Inkassa
+from .models import User, Session, Category, Product, Order, OrderItem, CashRegister, Inkassa, DeliveryPerson
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.utils.safestring import mark_safe
@@ -556,3 +556,4 @@ class InkassaAdmin(ModelAdmin):
             hours = int(duration.total_seconds() // 3600)
             return f"{hours}h"
         return "-"
+    
