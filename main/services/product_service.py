@@ -2,6 +2,7 @@ from django.db.models import Q, Count
 from django.core.paginator import Paginator
 from django.core.cache import cache
 from main.models import Product, Category
+from django.db.models import Count, Q
 
 
 class ProductService:
@@ -15,6 +16,7 @@ class ProductService:
             return None
         return [item.strip().strip('"\'') for item in param.split(',') if item.strip()]
     
+
     @staticmethod
     def get_all_products(page=1, per_page=20, search=None, category_ids=None, order_by='-created_at'):
         
@@ -34,8 +36,9 @@ class ProductService:
                     queryset = queryset.filter(category_id__in=category_ids_int)
                 except ValueError:
                     pass
-        
-        queryset = queryset.order_by(order_by)
+        queryset = queryset.annotate(
+            popularity=Count('orderitem')  
+        ).order_by('-popularity', order_by)
         
         paginator = Paginator(queryset, per_page)
         page_obj = paginator.get_page(page)
@@ -54,6 +57,7 @@ class ProductService:
                     'slug': product.category.slug,
                     'color': product.category.colors,
                 },
+                'popularity': product.popularity,  
                 'created_at': product.created_at.isoformat(),
                 'updated_at': product.updated_at.isoformat()
             })
