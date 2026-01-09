@@ -1,28 +1,539 @@
-from django.db.models import Sum, Count, Avg, Q, F
+from django.db.models import Sum, Count, Avg, Q, F, ExpressionWrapper, DurationField
+from django.db.models.functions import TruncHour, TruncDay, TruncMonth, ExtractHour
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta, datetime
 from main.models import Order, Product, Category, User, Inkassa, CashRegister, OrderItem, Session
 import json
 import pytz
+from decimal import Decimal
 
 
 UZB_TZ = pytz.timezone('Asia/Tashkent')
 
 
 def dashboard_callback(request, context):
+    """
+    Main dashboard callback for Smart Jowi Admin Panel
+    Features:
+    - Product sales pie chart (accurate percentage breakdown)
+    - Cashier performance tracking with shift-based filtering
+    - Growth analytics with beautiful visualizations
+    - Order type distribution (Hall, Delivery, Pickup)
+    - Average order preparation time
+    - Advanced time filtering (hours, days, custom ranges)
+    """
     
-    period = request.GET.get('period', 'week')
+    # Get filter parameters
+    period = request.GET.get('period', 'today')
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
     time_from = request.GET.get('time_from', '00:00') or '00:00'
     time_to = request.GET.get('time_to', '23:59') or '23:59'
+    cashier_id = request.GET.get('cashier', '')
     
     now = timezone.now().astimezone(UZB_TZ)
     
+    # Calculate date range based on period or custom dates
+    start_date, end_date, interval = calculate_date_range(
+        period, date_from, date_to, time_from, time_to, now
+    )
+    
+    # If custom dates were provided, update period
+    if date_from or date_to:
+        period = 'custom'
+    
+    # Main date filter
+    date_filter = Q(created_at__gte=start_date) & Q(created_at__lte=end_date)
+    
+    # Get comparison period (previous period of same length)
+    period_length = end_date - start_date
+    prev_start = start_date - period_length
+    prev_end = start_date
+    prev_filter = Q(created_at__gte=prev_start) & Q(created_at__lt=prev_end)
+    
+    # =====================
+    # CASH REGISTER DATA
+    # =====================
+    cash_register = CashRegister.objects.first()
+    current_balance = cash_register.current_balance if cash_register else Decimal('0')
+    
+    last_inkassa = Inkassa.objects.order_by('-created_at').first()
+    period_start_inkassa = last_inkassa.period_end if last_inkassa else (
+        Order.objects.order_by('created_at').first().created_at 
+        if Order.objects.exists() else now
+    )
+    
+    # =====================
+    # FILTERED ORDERS DATA
+    # =====================
+    filtered_orders = Order.objects.filter(date_filter)
+    prev_orders = Order.objects.filter(prev_filter)
+    
+    # Basic counts
+    total_orders = filtered_orders.count()
+    prev_total_orders = prev_orders.count()
+    
+    # Order status counts
+    status_counts = {
+        'open': filtered_orders.filter(status='OPEN').count(),
+        'preparing': filtered_orders.filter(status='PREPARING').count(),
+        'ready': filtered_orders.filter(status='READY').count(),
+        'completed': filtered_orders.filter(status='COMPLETED').count(),
+        'canceled': filtered_orders.filter(status='CANCELED').count(),
+    }
+    
+    # Payment status
+    paid_orders = filtered_orders.filter(is_paid=True).count()
+    unpaid_orders = filtered_orders.filter(is_paid=False).count()
+    
+    # Revenue calculations
+    total_revenue = filtered_orders.filter(
+        is_paid=True
+    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+    
+    prev_revenue = prev_orders.filter(
+        is_paid=True
+    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+    
+    # Growth percentage
+    revenue_growth = calculate_growth(total_revenue, prev_revenue)
+    orders_growth = calculate_growth(total_orders, prev_total_orders)
+    
+    # Average order value
+    avg_order_value = filtered_orders.filter(
+        is_paid=True
+    ).aggregate(avg=Avg('total_amount'))['avg'] or Decimal('0')
+    
+    prev_avg_order = prev_orders.filter(
+        is_paid=True
+    ).aggregate(avg=Avg('total_amount'))['avg'] or Decimal('0')
+    avg_order_growth = calculate_growth(avg_order_value, prev_avg_order)
+    
+    # Current period revenue (since last inkassa)
+    current_period_revenue = Order.objects.filter(
+        is_paid=True,
+        created_at__gte=period_start_inkassa
+    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+    
+    # =====================
+    # ORDER TYPE DISTRIBUTION (Hall, Delivery, Pickup)
+    # =====================
+    order_type_data = filtered_orders.values('order_type').annotate(
+        count=Count('id'),
+        revenue=Sum('total_amount', filter=Q(is_paid=True))
+    ).order_by('-count')
+    
+    order_type_stats = {
+        'HALL': {'count': 0, 'revenue': Decimal('0'), 'label': 'Dine-in', 'color': '#6366f1'},
+        'DELIVERY': {'count': 0, 'revenue': Decimal('0'), 'label': 'Delivery', 'color': '#f59e0b'},
+        'PICKUP': {'count': 0, 'revenue': Decimal('0'), 'label': 'Pickup', 'color': '#10b981'},
+    }
+    
+    for item in order_type_data:
+        if item['order_type'] in order_type_stats:
+            order_type_stats[item['order_type']]['count'] = item['count']
+            order_type_stats[item['order_type']]['revenue'] = item['revenue'] or Decimal('0')
+    
+    order_type_chart = {
+        'labels': [order_type_stats[k]['label'] for k in order_type_stats],
+        'data': [order_type_stats[k]['count'] for k in order_type_stats],
+        'colors': [order_type_stats[k]['color'] for k in order_type_stats],
+        'revenue': [float(order_type_stats[k]['revenue']) for k in order_type_stats],
+    }
+    
+    # =====================
+    # PRODUCT SALES PIE CHART (Accurate breakdown)
+    # =====================
+    product_sales = OrderItem.objects.filter(
+        order__created_at__gte=start_date,
+        order__created_at__lte=end_date,
+        order__is_paid=True
+    ).values(
+        'product__name',
+        'product__category__name'
+    ).annotate(
+        total_quantity=Sum('quantity'),
+        total_revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
+    ).order_by('-total_quantity')
+    
+    # Calculate total for percentages
+    total_items_sold = sum(item['total_quantity'] for item in product_sales)
+    total_product_revenue = sum(float(item['total_revenue'] or 0) for item in product_sales)
+    
+    # Top 10 products for pie chart + "Others"
+    top_products_list = list(product_sales[:10])
+    others_quantity = sum(item['total_quantity'] for item in product_sales[10:])
+    others_revenue = sum(float(item['total_revenue'] or 0) for item in product_sales[10:])
+    
+    product_chart_colors = [
+        '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6',
+        '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16', '#6b7280'
+    ]
+    
+    product_pie_data = {
+        'labels': [p['product__name'] for p in top_products_list],
+        'data': [p['total_quantity'] for p in top_products_list],
+        'percentages': [
+            round((p['total_quantity'] / total_items_sold * 100), 1) if total_items_sold > 0 else 0 
+            for p in top_products_list
+        ],
+        'revenue': [float(p['total_revenue'] or 0) for p in top_products_list],
+        'colors': product_chart_colors[:len(top_products_list)],
+    }
+    
+    if others_quantity > 0:
+        product_pie_data['labels'].append('Others')
+        product_pie_data['data'].append(others_quantity)
+        product_pie_data['percentages'].append(
+            round((others_quantity / total_items_sold * 100), 1) if total_items_sold > 0 else 0
+        )
+        product_pie_data['revenue'].append(others_revenue)
+        product_pie_data['colors'].append('#6b7280')
+    
+    # =====================
+    # CATEGORY SALES PIE CHART
+    # =====================
+    category_sales = OrderItem.objects.filter(
+        order__created_at__gte=start_date,
+        order__created_at__lte=end_date,
+        order__is_paid=True
+    ).values(
+        'product__category__name'
+    ).annotate(
+        total_quantity=Sum('quantity'),
+        total_revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
+    ).order_by('-total_revenue')
+    
+    category_chart_colors = [
+        '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#6366f1',
+        '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16'
+    ]
+    
+    category_pie_data = {
+        'labels': [c['product__category__name'] or 'Uncategorized' for c in category_sales],
+        'data': [float(c['total_revenue'] or 0) for c in category_sales],
+        'quantities': [c['total_quantity'] for c in category_sales],
+        'percentages': [
+            round((float(c['total_revenue'] or 0) / total_product_revenue * 100), 1) 
+            if total_product_revenue > 0 else 0 
+            for c in category_sales
+        ],
+        'colors': category_chart_colors[:len(list(category_sales))],
+    }
+    
+    # =====================
+    # CASHIER PERFORMANCE
+    # =====================
+    all_cashiers = User.objects.filter(role__in=['CASHIER', 'ADMIN'])
+    
+    # Filter by specific cashier if selected
+    cashier_filter = date_filter
+    if cashier_id:
+        cashier_filter &= Q(cashier_id=cashier_id)
+    
+    cashier_performance = Order.objects.filter(
+        cashier_filter,
+        is_paid=True,
+        cashier__isnull=False
+    ).values(
+        'cashier__id',
+        'cashier__first_name',
+        'cashier__last_name',
+        'cashier__email'
+    ).annotate(
+        order_count=Count('id'),
+        total_revenue=Sum('total_amount'),
+        avg_order_value=Avg('total_amount'),
+        hall_orders=Count('id', filter=Q(order_type='HALL')),
+        delivery_orders=Count('id', filter=Q(order_type='DELIVERY')),
+        pickup_orders=Count('id', filter=Q(order_type='PICKUP')),
+    ).order_by('-total_revenue')
+    
+    # Best cashier of the period
+    best_cashier = cashier_performance.first() if cashier_performance else None
+    
+    # Cashier shift data (inkassa records)
+    cashier_shifts = Inkassa.objects.filter(
+        created_at__gte=start_date,
+        created_at__lte=end_date
+    ).select_related('cashier').order_by('-created_at')[:10]
+    
+    # =====================
+    # AVERAGE ORDER PREPARATION TIME
+    # =====================
+    orders_with_ready_time = filtered_orders.filter(
+        ready_at__isnull=False,
+        status__in=['READY', 'COMPLETED']
+    ).annotate(
+        prep_time=ExpressionWrapper(
+            F('ready_at') - F('created_at'),
+            output_field=DurationField()
+        )
+    )
+    
+    avg_prep_time_seconds = 0
+    if orders_with_ready_time.exists():
+        total_prep_time = sum(
+            (o.prep_time.total_seconds() for o in orders_with_ready_time if o.prep_time),
+            0
+        )
+        avg_prep_time_seconds = total_prep_time / orders_with_ready_time.count() if orders_with_ready_time.count() > 0 else 0
+    
+    avg_prep_minutes = int(avg_prep_time_seconds // 60)
+    avg_prep_seconds = int(avg_prep_time_seconds % 60)
+    
+    # =====================
+    # HOURLY DISTRIBUTION (Peak hours)
+    # =====================
+    hourly_orders = filtered_orders.annotate(
+        hour=ExtractHour('created_at')
+    ).values('hour').annotate(
+        count=Count('id'),
+        revenue=Sum('total_amount', filter=Q(is_paid=True))
+    ).order_by('hour')
+    
+    hourly_data = {str(i): {'count': 0, 'revenue': 0} for i in range(24)}
+    peak_hour = {'hour': 0, 'count': 0}
+    
+    for h in hourly_orders:
+        hourly_data[str(h['hour'])] = {
+            'count': h['count'],
+            'revenue': float(h['revenue'] or 0)
+        }
+        if h['count'] > peak_hour['count']:
+            peak_hour = {'hour': h['hour'], 'count': h['count']}
+    
+    hourly_chart = {
+        'labels': [f"{i:02d}:00" for i in range(24)],
+        'data': [hourly_data[str(i)]['count'] for i in range(24)],
+        'revenue': [hourly_data[str(i)]['revenue'] for i in range(24)],
+    }
+    
+    # =====================
+    # REVENUE & ORDERS TREND CHARTS
+    # =====================
+    revenue_chart_data = get_revenue_chart_data(start_date, end_date, interval)
+    orders_chart_data = get_orders_chart_data(start_date, end_date, interval)
+    
+    # =====================
+    # GROWTH METRICS
+    # =====================
+    # Weekly growth (last 4 weeks comparison)
+    weekly_growth_data = []
+    for i in range(4):
+        week_end = now - timedelta(weeks=i)
+        week_start = week_end - timedelta(weeks=1)
+        week_revenue = Order.objects.filter(
+            is_paid=True,
+            created_at__gte=week_start,
+            created_at__lt=week_end
+        ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+        week_orders = Order.objects.filter(
+            created_at__gte=week_start,
+            created_at__lt=week_end
+        ).count()
+        weekly_growth_data.append({
+            'week': f"Week {4-i}",
+            'week_label': week_start.strftime('%d.%m') + ' - ' + week_end.strftime('%d.%m'),
+            'revenue': float(week_revenue),
+            'orders': week_orders,
+        })
+    weekly_growth_data.reverse()
+    
+    growth_chart = {
+        'labels': [w['week_label'] for w in weekly_growth_data],
+        'revenue': [w['revenue'] for w in weekly_growth_data],
+        'orders': [w['orders'] for w in weekly_growth_data],
+    }
+    
+    # =====================
+    # SESSION & LOGIN DATA
+    # =====================
+    active_session_threshold = now - timedelta(minutes=30)
+    active_sessions = Session.objects.filter(
+        last_activity__gte=active_session_threshold
+    ).count()
+    
+    recent_logins = User.objects.filter(
+        last_login_at__gte=start_date,
+        last_login_at__lte=end_date
+    ).order_by('-last_login_at')[:10]
+    
+    recent_logins_count = User.objects.filter(
+        last_login_at__gte=start_date,
+        last_login_at__lte=end_date
+    ).count()
+    
+    # =====================
+    # TOP PRODUCTS TABLE
+    # =====================
+    top_products = OrderItem.objects.filter(
+        order__created_at__gte=start_date,
+        order__created_at__lte=end_date,
+        order__is_paid=True
+    ).values(
+        'product__name',
+        'product__category__name'
+    ).annotate(
+        total_quantity=Sum('quantity'),
+        total_revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
+    ).order_by('-total_quantity')[:10]
+    
+    # =====================
+    # FILTER OPTIONS
+    # =====================
+    filters = [
+        {'label': 'Today', 'link': '?period=today', 'active': period == 'today', 'icon': 'today'},
+        {'label': 'Yesterday', 'link': '?period=yesterday', 'active': period == 'yesterday', 'icon': 'event'},
+        {'label': 'Week', 'link': '?period=week', 'active': period == 'week', 'icon': 'date_range'},
+        {'label': 'Month', 'link': '?period=month', 'active': period == 'month', 'icon': 'calendar_month'},
+        {'label': 'Year', 'link': '?period=year', 'active': period == 'year', 'icon': 'calendar_today'},
+    ]
+    
+    # Period label
+    period_label = get_period_label(period, start_date, end_date)
+    
+    # =====================
+    # BUILD CONTEXT
+    # =====================
+    context.update({
+        # Time and Period
+        'period': period,
+        'period_label': period_label,
+        'filters': filters,
+        'current_time': now.strftime('%d.%m.%Y %H:%M'),
+        'timezone_label': 'Asia/Tashkent (UTC+5)',
+        
+        # Date filter values
+        'date_from': date_from,
+        'date_to': date_to,
+        'time_from': time_from,
+        'time_to': time_to,
+        'display_date_from': start_date.strftime('%d.%m.%Y'),
+        'display_time_from': start_date.strftime('%H:%M'),
+        'display_date_to': end_date.strftime('%d.%m.%Y'),
+        'display_time_to': end_date.strftime('%H:%M'),
+        
+        # KPI Cards
+        'kpis': [
+            {
+                'title': 'Total Revenue',
+                'metric': f'{total_revenue:,.0f}',
+                'unit': 'UZS',
+                'footer': period_label,
+                'icon': 'payments',
+                'color': 'emerald',
+                'growth': revenue_growth,
+            },
+            {
+                'title': 'Total Orders',
+                'metric': str(total_orders),
+                'unit': '',
+                'footer': period_label,
+                'icon': 'shopping_cart',
+                'color': 'blue',
+                'growth': orders_growth,
+            },
+            {
+                'title': 'Avg Order Value',
+                'metric': f'{avg_order_value:,.0f}',
+                'unit': 'UZS',
+                'footer': period_label,
+                'icon': 'trending_up',
+                'color': 'violet',
+                'growth': avg_order_growth,
+            },
+            {
+                'title': 'Cash Register',
+                'metric': f'{current_balance:,.0f}',
+                'unit': 'UZS',
+                'footer': f'Since inkassa: {current_period_revenue:,.0f} UZS',
+                'icon': 'account_balance_wallet',
+                'color': 'amber',
+                'growth': None,
+            },
+        ],
+        
+        # Order Status Cards
+        'order_status_cards': [
+            {'title': 'Open', 'count': status_counts['open'], 'color': 'blue', 'icon': 'pending'},
+            {'title': 'Preparing', 'count': status_counts['preparing'], 'color': 'orange', 'icon': 'restaurant'},
+            {'title': 'Ready', 'count': status_counts['ready'], 'color': 'amber', 'icon': 'done'},
+            {'title': 'Completed', 'count': status_counts['completed'], 'color': 'green', 'icon': 'check_circle'},
+            {'title': 'Canceled', 'count': status_counts['canceled'], 'color': 'red', 'icon': 'cancel'},
+        ],
+        
+        # Payment Status
+        'payment_status': {
+            'paid': paid_orders,
+            'unpaid': unpaid_orders,
+            'paid_percentage': round(paid_orders / total_orders * 100, 1) if total_orders > 0 else 0,
+        },
+        
+        # Order Type Stats
+        'order_type_stats': order_type_stats,
+        'order_type_chart_json': json.dumps(order_type_chart),
+        
+        # Product Pie Chart
+        'product_pie_json': json.dumps(product_pie_data),
+        'total_items_sold': total_items_sold,
+        'total_product_revenue': total_product_revenue,
+        
+        # Category Pie Chart
+        'category_pie_json': json.dumps(category_pie_data),
+        
+        # Cashier Performance
+        'cashier_performance': list(cashier_performance[:10]),
+        'best_cashier': best_cashier,
+        'all_cashiers': all_cashiers,
+        'selected_cashier': cashier_id,
+        'cashier_shifts': cashier_shifts,
+        
+        # Preparation Time
+        'avg_prep_time': f'{avg_prep_minutes}:{avg_prep_seconds:02d}',
+        'avg_prep_minutes': avg_prep_minutes,
+        
+        # Peak Hours
+        'peak_hour': peak_hour,
+        'hourly_chart_json': json.dumps(hourly_chart),
+        
+        # Growth Charts
+        'growth_chart_json': json.dumps(growth_chart),
+        'revenue_chart_json': json.dumps(revenue_chart_data),
+        'orders_chart_json': json.dumps(orders_chart_data),
+        
+        # Top Products
+        'top_products': top_products,
+        
+        # Session Stats
+        'login_stats': {
+            'active_sessions': active_sessions,
+            'recent_logins_count': recent_logins_count,
+        },
+        'recent_logins': [
+            {
+                'id': user.id,
+                'name': f"{user.first_name} {user.last_name}",
+                'email': user.email,
+                'last_login_at': user.last_login_at.astimezone(UZB_TZ).strftime('%d.%m.%Y %H:%M') if user.last_login_at else None,
+                'last_login_api': user.last_login_api,
+            }
+            for user in recent_logins
+        ],
+    })
+    
+    return context
+
+
+def calculate_date_range(period, date_from, date_to, time_from, time_to, now):
+    """Calculate start and end dates based on period or custom range"""
+    
     start_date = None
     end_date = None
+    interval = 'day'
     
+    # Custom date range
     if date_from:
         try:
             hour_from, minute_from = 0, 0
@@ -55,265 +566,79 @@ def dashboard_callback(request, context):
         except (ValueError, IndexError):
             end_date = None
     
+    # If custom dates provided
     if start_date or end_date:
-        period = 'custom'
-        
         if start_date and not end_date:
             end_date = now
-        
         if end_date and not start_date:
             start_date = end_date - timedelta(days=7)
         
-        total_seconds = (end_date - start_date).total_seconds()
-        hours_diff = total_seconds / 3600
-        days_diff = total_seconds / 86400
-        
-        if hours_diff <= 24:
+        # Determine interval based on range
+        total_hours = (end_date - start_date).total_seconds() / 3600
+        if total_hours <= 24:
             interval = 'hour'
-        elif days_diff <= 31:
+        elif total_hours <= 24 * 31:
             interval = 'day'
         else:
             interval = 'month'
-    elif period == 'day':
-        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_date = now
-        interval = 'hour'
-    elif period == 'week':
-        start_date = now - timedelta(days=7)
-        end_date = now
-        interval = 'day'
-    elif period == 'month':
-        start_date = now - timedelta(days=30)
-        end_date = now
-        interval = 'day'
-    elif period == 'year':
-        start_date = now - timedelta(days=365)
-        end_date = now
-        interval = 'month'
     else:
-        start_date = now - timedelta(days=7)
-        end_date = now
-        interval = 'day'
+        # Predefined periods
+        if period == 'today':
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = now
+            interval = 'hour'
+        elif period == 'yesterday':
+            yesterday = now - timedelta(days=1)
+            start_date = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999)
+            interval = 'hour'
+        elif period == 'week':
+            start_date = now - timedelta(days=7)
+            end_date = now
+            interval = 'day'
+        elif period == 'month':
+            start_date = now - timedelta(days=30)
+            end_date = now
+            interval = 'day'
+        elif period == 'year':
+            start_date = now - timedelta(days=365)
+            end_date = now
+            interval = 'month'
+        else:
+            # Default to today
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = now
+            interval = 'hour'
     
-    date_filter = Q(created_at__gte=start_date) & Q(created_at__lte=end_date)
-    
-    cash_register = CashRegister.objects.first()
-    current_balance = cash_register.current_balance if cash_register else 0
-    
-    last_inkassa = Inkassa.objects.order_by('-created_at').first()
-    period_start = last_inkassa.period_end if last_inkassa else Order.objects.order_by('created_at').first().created_at if Order.objects.exists() else now
-    
-    filtered_orders = Order.objects.filter(date_filter)
-    
-    total_orders = filtered_orders.count()
-    
-    preparing_orders = filtered_orders.filter(status='PREPARING').count()
-    ready_orders = filtered_orders.filter(status='READY').count()
-    canceled_orders = filtered_orders.filter(status='CANCELED').count()
-    
-    paid_orders = filtered_orders.filter(is_paid=True).count()
-    unpaid_orders = filtered_orders.filter(is_paid=False).count()
-    
-    total_revenue = filtered_orders.filter(
-        is_paid=True
-    ).aggregate(total=Sum('total_amount'))['total'] or 0
-    
-    avg_order_value = filtered_orders.filter(
-        is_paid=True
-    ).aggregate(avg=Avg('total_amount'))['avg'] or 0
-    
-    current_period_revenue = Order.objects.filter(
-        is_paid=True,
-        created_at__gte=period_start
-    ).aggregate(total=Sum('total_amount'))['total'] or 0
-    
-    active_session_threshold = now - timedelta(minutes=30)
-    active_sessions = Session.objects.filter(
-        last_activity__gte=active_session_threshold
-    ).count()
-    
-    recent_logins = User.objects.filter(
-        last_login_at__gte=start_date,
-        last_login_at__lte=end_date
-    ).order_by('-last_login_at')[:10]
-    
-    recent_logins_count = User.objects.filter(
-        last_login_at__gte=start_date,
-        last_login_at__lte=end_date
-    ).count()
-    
-    current_user = None
-    if hasattr(request, 'user') and request.user.is_authenticated:
-        current_user = {
-            'id': request.user.id,
-            'name': f"{request.user.first_name} {request.user.last_name}",
-            'email': request.user.email,
-            'last_login': request.user.last_login_at.astimezone(UZB_TZ).strftime('%Y-%m-%d %H:%M') if hasattr(request.user, 'last_login_at') and request.user.last_login_at else None,
-        }
-    
-    try:
-        revenue_chart_data = get_revenue_chart_data(start_date, end_date, interval)
-    except Exception as e:
-        revenue_chart_data = {'labels': [], 'datasets': [{'label': 'Revenue', 'data': []}]}
-    
-    try:
-        orders_chart_data = get_orders_chart_data(start_date, end_date, interval)
-    except Exception as e:
-        orders_chart_data = {'labels': [], 'datasets': [{'label': 'Orders', 'data': []}]}
-    
-    top_products = OrderItem.objects.filter(
-        order__created_at__gte=start_date,
-        order__created_at__lte=end_date,
-        order__is_paid=True
-    ).values(
-        'product__name'
-    ).annotate(
-        total_quantity=Sum('quantity'),
-        total_revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
-    ).order_by('-total_quantity')[:5]
-    
-    category_data = OrderItem.objects.filter(
-        order__created_at__gte=start_date,
-        order__created_at__lte=end_date,
-        order__is_paid=True
-    ).values(
-        'product__category__name'
-    ).annotate(
-        revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
-    ).order_by('-revenue')
-    
-    cashier_performance = Order.objects.filter(
-        date_filter,
-        is_paid=True,
-        cashier__isnull=False
-    ).values(
-        'cashier__first_name',
-        'cashier__last_name'
-    ).annotate(
-        order_count=Count('id'),
-        total_revenue=Sum('total_amount')
-    ).order_by('-total_revenue')[:5]
-    
-    filters = [
-        {'label': 'Today', 'link': '?period=day', 'active': period == 'day'},
-        {'label': 'Week', 'link': '?period=week', 'active': period == 'week'},
-        {'label': 'Month', 'link': '?period=month', 'active': period == 'month'},
-        {'label': 'Year', 'link': '?period=year', 'active': period == 'year'},
-    ]
-    
+    return start_date, end_date, interval
+
+
+def calculate_growth(current, previous):
+    """Calculate growth percentage"""
+    if previous == 0:
+        return 100 if current > 0 else 0
+    return round(((float(current) - float(previous)) / float(previous)) * 100, 1)
+
+
+def get_period_label(period, start_date, end_date):
+    """Get human-readable period label"""
     if period == 'custom':
-        period_label = f"{start_date.strftime('%d.%m.%Y %H:%M')} — {end_date.strftime('%d.%m.%Y %H:%M')}"
-    elif period == 'day':
-        period_label = 'Today'
+        return f"{start_date.strftime('%d.%m.%Y %H:%M')} — {end_date.strftime('%d.%m.%Y %H:%M')}"
+    elif period == 'today':
+        return 'Today'
+    elif period == 'yesterday':
+        return 'Yesterday'
     elif period == 'week':
-        period_label = 'Last 7 days'
+        return 'Last 7 days'
     elif period == 'month':
-        period_label = 'Last 30 days'
+        return 'Last 30 days'
     elif period == 'year':
-        period_label = 'Last 365 days'
-    else:
-        period_label = period
-    
-    date_from_value = start_date.strftime('%Y-%m-%d') if period == 'custom' and date_from else ''
-    date_to_value = end_date.strftime('%Y-%m-%d') if period == 'custom' and date_to else ''
-    time_from_value = time_from if period == 'custom' else '00:00'
-    time_to_value = time_to if period == 'custom' else '23:59'
-    
-    context.update({
-        'period': period,
-        'period_label': period_label,
-        'filters': filters,
-        'current_user': current_user,
-        'date_from': date_from_value,
-        'date_to': date_to_value,
-        'time_from': time_from_value,
-        'time_to': time_to_value,
-        'display_date_from': start_date.strftime('%d.%m.%Y') if start_date else '',
-        'display_time_from': start_date.strftime('%H:%M') if start_date else '',
-        'display_date_to': end_date.strftime('%d.%m.%Y') if end_date else '',
-        'display_time_to': end_date.strftime('%H:%M') if end_date else '',
-        'current_time': now.strftime('%d.%m.%Y %H:%M'),
-        'kpis': [
-            {
-                'title': 'Total Revenue',
-                'metric': f'{total_revenue:,.0f} UZS',
-                'footer': period_label,
-                'icon': 'payments',
-            },
-            {
-                'title': 'Total Orders',
-                'metric': str(total_orders),
-                'footer': period_label,
-                'icon': 'shopping_cart',
-            },
-            {
-                'title': 'Avg Order Value',
-                'metric': f'{avg_order_value:,.0f} UZS',
-                'footer': period_label,
-                'icon': 'trending_up',
-            },
-            {
-                'title': 'Cash Register',
-                'metric': f'{current_balance:,.0f} UZS',
-                'footer': f'Since last inkassa: {current_period_revenue:,.0f} UZS',
-                'icon': 'account_balance_wallet',
-            },
-        ],
-        'order_status_cards': [
-            {
-                'title': 'Preparing',
-                'count': preparing_orders,
-                'color': 'orange',
-            },
-            {
-                'title': 'Ready',
-                'count': ready_orders,
-                'color': 'yellow',
-            },
-            {
-                'title': 'Canceled',
-                'count': canceled_orders,
-                'color': 'red',
-            },
-        ],
-        'payment_status_cards': [
-            {
-                'title': 'Paid Orders',
-                'count': paid_orders,
-                'color': 'green',
-            },
-            {
-                'title': 'Unpaid Orders',
-                'count': unpaid_orders,
-                'color': 'red',
-            },
-        ],
-        'login_stats': {
-            'active_sessions': active_sessions,
-            'recent_logins_count': recent_logins_count,
-        },
-        'recent_logins': [
-            {
-                'id': user.id,
-                'name': f"{user.first_name} {user.last_name}",
-                'email': user.email,
-                'last_login_at': user.last_login_at.astimezone(UZB_TZ).strftime('%d.%m.%Y %H:%M') if user.last_login_at else None,
-                'last_login_api': user.last_login_api,
-            }
-            for user in recent_logins
-        ],
-        'revenue_chart_json': json.dumps(revenue_chart_data),
-        'orders_chart_json': json.dumps(orders_chart_data),
-        'top_products': top_products,
-        'category_data': category_data,
-        'cashier_performance': cashier_performance,
-    })
-    
-    
-    return context
+        return 'Last 365 days'
+    return period
 
 
 def get_revenue_chart_data(start_date, end_date, interval):
+    """Generate revenue trend data for charts"""
     labels = []
     data = []
     
@@ -368,14 +693,20 @@ def get_revenue_chart_data(start_date, end_date, interval):
             'label': 'Revenue',
             'data': data,
             'borderColor': '#10b981',
-            'backgroundColor': 'rgba(16, 185, 129, 0.1)',
+            'backgroundColor': 'rgba(16, 185, 129, 0.15)',
             'tension': 0.4,
             'fill': True,
+            'pointRadius': 4,
+            'pointHoverRadius': 6,
+            'pointBackgroundColor': '#10b981',
+            'pointBorderColor': '#fff',
+            'pointBorderWidth': 2,
         }]
     }
 
 
 def get_orders_chart_data(start_date, end_date, interval):
+    """Generate orders trend data for charts"""
     labels = []
     data = []
     
@@ -426,9 +757,14 @@ def get_orders_chart_data(start_date, end_date, interval):
         'datasets': [{
             'label': 'Orders',
             'data': data,
-            'borderColor': '#3b82f6',
-            'backgroundColor': 'rgba(59, 130, 246, 0.1)',
+            'borderColor': '#6366f1',
+            'backgroundColor': 'rgba(99, 102, 241, 0.15)',
             'tension': 0.4,
             'fill': True,
+            'pointRadius': 4,
+            'pointHoverRadius': 6,
+            'pointBackgroundColor': '#6366f1',
+            'pointBorderColor': '#fff',
+            'pointBorderWidth': 2,
         }]
     }

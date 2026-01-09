@@ -84,7 +84,9 @@ echo  Oyna minimizatsiya qilindi. Taskbarda topishingiz mumkin.
 echo  To'xtatish uchun: stop_server.bat ni ishga tushiring
 echo  ================================
 echo.
-
+pip install -r requirements.txt
+python manage.py makemigrations
+python manage.py migrate
 python manage.py runserver 0.0.0.0:8000
 
 echo.
