@@ -12,7 +12,6 @@ from django.utils import timezone
 
 from services.shift_notification_service import get_shift_notification_service
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'

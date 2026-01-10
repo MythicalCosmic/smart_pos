@@ -1,14 +1,3 @@
-"""
-Test Command for Shift Notification System
-Place this in: main/management/commands/test_shift_notifier.py
-
-Usage:
-    python manage.py test_shift_notifier --test          # Send test message
-    python manage.py test_shift_notifier --start         # Send shift start
-    python manage.py test_shift_notifier --end           # Send shift end
-    python manage.py test_shift_notifier --stats         # Show today's stats
-"""
-
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from main.services.shift_notification_service import get_shift_notification_service
@@ -68,7 +57,6 @@ class Command(BaseCommand):
             self.stdout.write('  python manage.py test_shift_notifier --stats')
 
     def check_connection(self):
-        """Check if Telegram API is reachable."""
         self.stdout.write('Checking Telegram connection...')
         
         telegram = get_telegram_service()
@@ -82,7 +70,6 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR('❌ Cannot reach Telegram API'))
 
     def send_test_message(self):
-        """Send a test message to Telegram."""
         self.stdout.write('Sending test message...')
         
         telegram = get_telegram_service()
@@ -107,7 +94,6 @@ Bu test xabar Shift Notification tizimidan.
             self.stdout.write(self.style.ERROR(f'❌ Failed to send: {error}'))
 
     def send_shift_start(self):
-        """Send shift start notification."""
         self.stdout.write('Sending shift start notification...')
         
         service = get_shift_notification_service()
@@ -119,7 +105,6 @@ Bu test xabar Shift Notification tizimidan.
             self.stdout.write(self.style.WARNING('⚠️ Message queued (offline mode)'))
 
     def send_shift_end(self):
-        """Send shift end notification with statistics."""
         self.stdout.write('Sending shift end notification...')
         
         service = get_shift_notification_service()
@@ -131,7 +116,6 @@ Bu test xabar Shift Notification tizimidan.
             self.stdout.write(self.style.WARNING('⚠️ Message queued (offline mode)'))
 
     def show_stats(self):
-        """Show today's statistics without sending."""
         self.stdout.write('Fetching today\'s statistics...\n')
         
         service = get_shift_notification_service()
