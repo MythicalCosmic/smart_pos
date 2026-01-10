@@ -34,13 +34,13 @@ ALLOWED_HOSTS = ['*']
 # Application definition
 
 INSTALLED_APPS = [
-    "unfold",  # before django.contrib.admin
-    "unfold.contrib.filters",  # optional, if special filters are needed
-    "unfold.contrib.forms",  # optional, if special form elements are needed
-    "unfold.contrib.inlines",  # optional, if special inlines are needed
-    "unfold.contrib.import_export",  # optional, if django-import-export package is used
-    "unfold.contrib.guardian",  # optional, if django-guardian package is used
-    "unfold.contrib.simple_history",  # optional, if django-simple-history package is used
+    "unfold", 
+    "unfold.contrib.filters",  
+    "unfold.contrib.forms",  
+    "unfold.contrib.inlines",  
+    "unfold.contrib.import_export",  
+    "unfold.contrib.guardian",  
+    "unfold.contrib.simple_history", 
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -71,9 +71,9 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
-            BASE_DIR / 'templates',  # Project-level templates
+            BASE_DIR / 'templates', 
             BASE_DIR / 'main' / 'templates',  
-            BASE_DIR / 'client' / 'templates',# App-level templates
+            BASE_DIR / 'client' / 'templates',
         ],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -250,40 +250,6 @@ MEDIA_ROOT = BASE_DIR / 'media'
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-
-#     'formatters': {
-#         'verbose': {
-#             'format': '[{asctime}] {levelname} {name}: {message}',
-#             'style': '{',
-#         },
-#     },
-
-#     'handlers': {
-#         'file': {
-#             'level': 'DEBUG',
-#             'class': 'logging.FileHandler',
-#             'filename': BASE_DIR / 'logger' / 'logs.txt',
-#             'formatter': 'verbose',
-#         },
-#     },
-
-#     'root': {
-#         'handlers': ['file'],
-#         'level': 'DEBUG',
-#     },
-
-#     'loggers': {
-#         'django.db.backends': {
-#             'handlers': ['file'],
-#             'level': 'DEBUG',
-#             'propagate': False,
-#         },
-#     },
-# }
 
 
 TIME_ZONE = 'Asia/Tashkent'
