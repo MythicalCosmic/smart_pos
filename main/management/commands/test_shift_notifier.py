@@ -80,7 +80,7 @@ class Command(BaseCommand):
 
 Bu test xabar Shift Notification tizimidan.
 
-✅ Agar siz buni ko'rsangiz, integratsiya ishlayapti!
+✅ Agar siz buni ko'rsangiz, integratsiya ishlavotti!
 
 ⏰ Vaqt: {now.strftime('%Y-%m-%d %H:%M:%S')}
 """
