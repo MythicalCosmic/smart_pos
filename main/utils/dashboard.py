@@ -13,18 +13,6 @@ UZB_TZ = pytz.timezone('Asia/Tashkent')
 
 
 def dashboard_callback(request, context):
-    """
-    Main dashboard callback for Smart Jowi Admin Panel
-    Features:
-    - Product sales pie chart (accurate percentage breakdown)
-    - Cashier performance tracking with shift-based filtering
-    - Growth analytics with beautiful visualizations
-    - Order type distribution (Hall, Delivery, Pickup)
-    - Average order preparation time
-    - Advanced time filtering (hours, days, custom ranges)
-    """
-    
-    # Get filter parameters
     period = request.GET.get('period', 'today')
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
@@ -34,27 +22,20 @@ def dashboard_callback(request, context):
     
     now = timezone.now().astimezone(UZB_TZ)
     
-    # Calculate date range based on period or custom dates
     start_date, end_date, interval = calculate_date_range(
         period, date_from, date_to, time_from, time_to, now
     )
     
-    # If custom dates were provided, update period
     if date_from or date_to:
         period = 'custom'
     
-    # Main date filter
     date_filter = Q(created_at__gte=start_date) & Q(created_at__lte=end_date)
     
-    # Get comparison period (previous period of same length)
     period_length = end_date - start_date
     prev_start = start_date - period_length
     prev_end = start_date
     prev_filter = Q(created_at__gte=prev_start) & Q(created_at__lt=prev_end)
-    
-    # =====================
-    # CASH REGISTER DATA
-    # =====================
+
     cash_register = CashRegister.objects.first()
     current_balance = cash_register.current_balance if cash_register else Decimal('0')
     
@@ -64,17 +45,12 @@ def dashboard_callback(request, context):
         if Order.objects.exists() else now
     )
     
-    # =====================
-    # FILTERED ORDERS DATA
-    # =====================
     filtered_orders = Order.objects.filter(date_filter)
     prev_orders = Order.objects.filter(prev_filter)
     
-    # Basic counts
     total_orders = filtered_orders.count()
     prev_total_orders = prev_orders.count()
-    
-    # Order status counts
+
     status_counts = {
         'open': filtered_orders.filter(status='OPEN').count(),
         'preparing': filtered_orders.filter(status='PREPARING').count(),
@@ -82,12 +58,10 @@ def dashboard_callback(request, context):
         'completed': filtered_orders.filter(status='COMPLETED').count(),
         'canceled': filtered_orders.filter(status='CANCELED').count(),
     }
-    
-    # Payment status
+
     paid_orders = filtered_orders.filter(is_paid=True).count()
     unpaid_orders = filtered_orders.filter(is_paid=False).count()
     
-    # Revenue calculations
     total_revenue = filtered_orders.filter(
         is_paid=True
     ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
@@ -95,12 +69,10 @@ def dashboard_callback(request, context):
     prev_revenue = prev_orders.filter(
         is_paid=True
     ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
-    
-    # Growth percentage
+
     revenue_growth = calculate_growth(total_revenue, prev_revenue)
     orders_growth = calculate_growth(total_orders, prev_total_orders)
     
-    # Average order value
     avg_order_value = filtered_orders.filter(
         is_paid=True
     ).aggregate(avg=Avg('total_amount'))['avg'] or Decimal('0')
@@ -110,15 +82,11 @@ def dashboard_callback(request, context):
     ).aggregate(avg=Avg('total_amount'))['avg'] or Decimal('0')
     avg_order_growth = calculate_growth(avg_order_value, prev_avg_order)
     
-    # Current period revenue (since last inkassa)
     current_period_revenue = Order.objects.filter(
         is_paid=True,
         created_at__gte=period_start_inkassa
     ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
-    
-    # =====================
-    # ORDER TYPE DISTRIBUTION (Hall, Delivery, Pickup)
-    # =====================
+
     order_type_data = filtered_orders.values('order_type').annotate(
         count=Count('id'),
         revenue=Sum('total_amount', filter=Q(is_paid=True))
@@ -141,10 +109,7 @@ def dashboard_callback(request, context):
         'colors': [order_type_stats[k]['color'] for k in order_type_stats],
         'revenue': [float(order_type_stats[k]['revenue']) for k in order_type_stats],
     }
-    
-    # =====================
-    # PRODUCT SALES PIE CHART (Accurate breakdown)
-    # =====================
+
     product_sales = OrderItem.objects.filter(
         order__created_at__gte=start_date,
         order__created_at__lte=end_date,
@@ -156,12 +121,10 @@ def dashboard_callback(request, context):
         total_quantity=Sum('quantity'),
         total_revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
     ).order_by('-total_quantity')
-    
-    # Calculate total for percentages
+
     total_items_sold = sum(item['total_quantity'] for item in product_sales)
     total_product_revenue = sum(float(item['total_revenue'] or 0) for item in product_sales)
-    
-    # Top 10 products for pie chart + "Others"
+
     top_products_list = list(product_sales[:10])
     others_quantity = sum(item['total_quantity'] for item in product_sales[10:])
     others_revenue = sum(float(item['total_revenue'] or 0) for item in product_sales[10:])
@@ -191,9 +154,6 @@ def dashboard_callback(request, context):
         product_pie_data['revenue'].append(others_revenue)
         product_pie_data['colors'].append('#6b7280')
     
-    # =====================
-    # CATEGORY SALES PIE CHART
-    # =====================
     category_sales = OrderItem.objects.filter(
         order__created_at__gte=start_date,
         order__created_at__lte=end_date,
@@ -222,12 +182,8 @@ def dashboard_callback(request, context):
         'colors': category_chart_colors[:len(list(category_sales))],
     }
     
-    # =====================
-    # CASHIER PERFORMANCE
-    # =====================
     all_cashiers = User.objects.filter(role__in=['CASHIER', 'ADMIN'])
-    
-    # Filter by specific cashier if selected
+
     cashier_filter = date_filter
     if cashier_id:
         cashier_filter &= Q(cashier_id=cashier_id)
@@ -250,18 +206,13 @@ def dashboard_callback(request, context):
         pickup_orders=Count('id', filter=Q(order_type='PICKUP')),
     ).order_by('-total_revenue')
     
-    # Best cashier of the period
     best_cashier = cashier_performance.first() if cashier_performance else None
-    
-    # Cashier shift data (inkassa records)
+
     cashier_shifts = Inkassa.objects.filter(
         created_at__gte=start_date,
         created_at__lte=end_date
     ).select_related('cashier').order_by('-created_at')[:10]
-    
-    # =====================
-    # AVERAGE ORDER PREPARATION TIME
-    # =====================
+
     orders_with_ready_time = filtered_orders.filter(
         ready_at__isnull=False,
         status__in=['READY', 'COMPLETED']
@@ -283,9 +234,6 @@ def dashboard_callback(request, context):
     avg_prep_minutes = int(avg_prep_time_seconds // 60)
     avg_prep_seconds = int(avg_prep_time_seconds % 60)
     
-    # =====================
-    # HOURLY DISTRIBUTION (Peak hours)
-    # =====================
     hourly_orders = filtered_orders.annotate(
         hour=ExtractHour('created_at')
     ).values('hour').annotate(
@@ -310,16 +258,9 @@ def dashboard_callback(request, context):
         'revenue': [hourly_data[str(i)]['revenue'] for i in range(24)],
     }
     
-    # =====================
-    # REVENUE & ORDERS TREND CHARTS
-    # =====================
     revenue_chart_data = get_revenue_chart_data(start_date, end_date, interval)
     orders_chart_data = get_orders_chart_data(start_date, end_date, interval)
     
-    # =====================
-    # GROWTH METRICS
-    # =====================
-    # Weekly growth (last 4 weeks comparison)
     weekly_growth_data = []
     for i in range(4):
         week_end = now - timedelta(weeks=i)
@@ -346,10 +287,6 @@ def dashboard_callback(request, context):
         'revenue': [w['revenue'] for w in weekly_growth_data],
         'orders': [w['orders'] for w in weekly_growth_data],
     }
-    
-    # =====================
-    # SESSION & LOGIN DATA
-    # =====================
     active_session_threshold = now - timedelta(minutes=30)
     active_sessions = Session.objects.filter(
         last_activity__gte=active_session_threshold
@@ -365,9 +302,6 @@ def dashboard_callback(request, context):
         last_login_at__lte=end_date
     ).count()
     
-    # =====================
-    # TOP PRODUCTS TABLE
-    # =====================
     top_products = OrderItem.objects.filter(
         order__created_at__gte=start_date,
         order__created_at__lte=end_date,
@@ -380,9 +314,6 @@ def dashboard_callback(request, context):
         total_revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
     ).order_by('-total_quantity')[:10]
     
-    # =====================
-    # FILTER OPTIONS
-    # =====================
     filters = [
         {'label': 'Today', 'link': '?period=today', 'active': period == 'today', 'icon': 'today'},
         {'label': 'Yesterday', 'link': '?period=yesterday', 'active': period == 'yesterday', 'icon': 'event'},
@@ -391,21 +322,15 @@ def dashboard_callback(request, context):
         {'label': 'Year', 'link': '?period=year', 'active': period == 'year', 'icon': 'calendar_today'},
     ]
     
-    # Period label
     period_label = get_period_label(period, start_date, end_date)
-    
-    # =====================
-    # BUILD CONTEXT
-    # =====================
+
     context.update({
-        # Time and Period
         'period': period,
         'period_label': period_label,
         'filters': filters,
         'current_time': now.strftime('%d.%m.%Y %H:%M'),
         'timezone_label': 'Asia/Tashkent (UTC+5)',
         
-        # Date filter values
         'date_from': date_from,
         'date_to': date_to,
         'time_from': time_from,
@@ -415,7 +340,6 @@ def dashboard_callback(request, context):
         'display_date_to': end_date.strftime('%d.%m.%Y'),
         'display_time_to': end_date.strftime('%H:%M'),
         
-        # KPI Cards
         'kpis': [
             {
                 'title': 'Total Revenue',
@@ -455,7 +379,6 @@ def dashboard_callback(request, context):
             },
         ],
         
-        # Order Status Cards
         'order_status_cards': [
             {'title': 'Open', 'count': status_counts['open'], 'color': 'blue', 'icon': 'pending'},
             {'title': 'Preparing', 'count': status_counts['preparing'], 'color': 'orange', 'icon': 'restaurant'},
@@ -464,49 +387,39 @@ def dashboard_callback(request, context):
             {'title': 'Canceled', 'count': status_counts['canceled'], 'color': 'red', 'icon': 'cancel'},
         ],
         
-        # Payment Status
         'payment_status': {
             'paid': paid_orders,
             'unpaid': unpaid_orders,
             'paid_percentage': round(paid_orders / total_orders * 100, 1) if total_orders > 0 else 0,
         },
         
-        # Order Type Stats
         'order_type_stats': order_type_stats,
         'order_type_chart_json': json.dumps(order_type_chart),
         
-        # Product Pie Chart
         'product_pie_json': json.dumps(product_pie_data),
         'total_items_sold': total_items_sold,
         'total_product_revenue': total_product_revenue,
-        
-        # Category Pie Chart
+ 
         'category_pie_json': json.dumps(category_pie_data),
-        
-        # Cashier Performance
+    
         'cashier_performance': list(cashier_performance[:10]),
         'best_cashier': best_cashier,
         'all_cashiers': all_cashiers,
         'selected_cashier': cashier_id,
         'cashier_shifts': cashier_shifts,
         
-        # Preparation Time
         'avg_prep_time': f'{avg_prep_minutes}:{avg_prep_seconds:02d}',
         'avg_prep_minutes': avg_prep_minutes,
-        
-        # Peak Hours
+
         'peak_hour': peak_hour,
         'hourly_chart_json': json.dumps(hourly_chart),
-        
-        # Growth Charts
+    
         'growth_chart_json': json.dumps(growth_chart),
         'revenue_chart_json': json.dumps(revenue_chart_data),
         'orders_chart_json': json.dumps(orders_chart_data),
         
-        # Top Products
         'top_products': top_products,
         
-        # Session Stats
         'login_stats': {
             'active_sessions': active_sessions,
             'recent_logins_count': recent_logins_count,
@@ -527,13 +440,10 @@ def dashboard_callback(request, context):
 
 
 def calculate_date_range(period, date_from, date_to, time_from, time_to, now):
-    """Calculate start and end dates based on period or custom range"""
     
     start_date = None
     end_date = None
     interval = 'day'
-    
-    # Custom date range
     if date_from:
         try:
             hour_from, minute_from = 0, 0
@@ -566,14 +476,12 @@ def calculate_date_range(period, date_from, date_to, time_from, time_to, now):
         except (ValueError, IndexError):
             end_date = None
     
-    # If custom dates provided
     if start_date or end_date:
         if start_date and not end_date:
             end_date = now
         if end_date and not start_date:
             start_date = end_date - timedelta(days=7)
         
-        # Determine interval based on range
         total_hours = (end_date - start_date).total_seconds() / 3600
         if total_hours <= 24:
             interval = 'hour'
@@ -582,7 +490,6 @@ def calculate_date_range(period, date_from, date_to, time_from, time_to, now):
         else:
             interval = 'month'
     else:
-        # Predefined periods
         if period == 'today':
             start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
             end_date = now
@@ -605,7 +512,6 @@ def calculate_date_range(period, date_from, date_to, time_from, time_to, now):
             end_date = now
             interval = 'month'
         else:
-            # Default to today
             start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
             end_date = now
             interval = 'hour'
@@ -614,14 +520,12 @@ def calculate_date_range(period, date_from, date_to, time_from, time_to, now):
 
 
 def calculate_growth(current, previous):
-    """Calculate growth percentage"""
     if previous == 0:
         return 100 if current > 0 else 0
     return round(((float(current) - float(previous)) / float(previous)) * 100, 1)
 
 
 def get_period_label(period, start_date, end_date):
-    """Get human-readable period label"""
     if period == 'custom':
         return f"{start_date.strftime('%d.%m.%Y %H:%M')} — {end_date.strftime('%d.%m.%Y %H:%M')}"
     elif period == 'today':
@@ -638,7 +542,6 @@ def get_period_label(period, start_date, end_date):
 
 
 def get_revenue_chart_data(start_date, end_date, interval):
-    """Generate revenue trend data for charts"""
     labels = []
     data = []
     
@@ -706,7 +609,6 @@ def get_revenue_chart_data(start_date, end_date, interval):
 
 
 def get_orders_chart_data(start_date, end_date, interval):
-    """Generate orders trend data for charts"""
     labels = []
     data = []
     
