@@ -1,143 +1,167 @@
+"""
+Test Command for Shift Notification System
+Place this in: main/management/commands/test_shift.py
+
+Usage:
+    python manage.py test_shift --check         # Check Telegram connection
+    python manage.py test_shift --test          # Send test message
+    python manage.py test_shift --login <id>    # Simulate cashier login
+    python manage.py test_shift --logout <id>   # Simulate cashier logout
+    python manage.py test_shift --status        # Show current shift status
+    python manage.py test_shift --pending       # Process pending notifications
+"""
+
 from django.core.management.base import BaseCommand
-from django.utils import timezone
-from main.services.shift_notification_service import get_shift_notification_service
-from main.services.telegram_service import get_telegram_service
 
 
 class Command(BaseCommand):
     help = 'Test the shift notification system'
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--test',
-            action='store_true',
-            help='Send a test message to verify Telegram connection'
-        )
-        parser.add_argument(
-            '--start',
-            action='store_true',
-            help='Send shift start notification now'
-        )
-        parser.add_argument(
-            '--end',
-            action='store_true',
-            help='Send shift end notification with today\'s stats'
-        )
-        parser.add_argument(
-            '--stats',
-            action='store_true',
-            help='Show today\'s statistics without sending'
-        )
-        parser.add_argument(
-            '--check',
-            action='store_true',
-            help='Check Telegram connection'
-        )
+        parser.add_argument('--check', action='store_true', help='Check Telegram connection')
+        parser.add_argument('--test', action='store_true', help='Send test message')
+        parser.add_argument('--login', type=int, metavar='USER_ID', help='Simulate cashier login')
+        parser.add_argument('--logout', type=int, metavar='USER_ID', help='Simulate cashier logout')
+        parser.add_argument('--status', action='store_true', help='Show current shift status')
+        parser.add_argument('--pending', action='store_true', help='Process pending notifications')
 
     def handle(self, *args, **options):
         if options['check']:
             self.check_connection()
         elif options['test']:
-            self.send_test_message()
-        elif options['start']:
-            self.send_shift_start()
-        elif options['end']:
-            self.send_shift_end()
-        elif options['stats']:
-            self.show_stats()
+            self.send_test()
+        elif options['login']:
+            self.simulate_login(options['login'])
+        elif options['logout'] is not None:
+            self.simulate_logout(options['logout'])
+        elif options['status']:
+            self.show_status()
+        elif options['pending']:
+            self.process_pending()
         else:
-            self.stdout.write(self.style.WARNING(
-                'Please specify an option: --test, --start, --end, --stats, or --check'
-            ))
-            self.stdout.write('\nExamples:')
-            self.stdout.write('  python manage.py test_shift_notifier --check')
-            self.stdout.write('  python manage.py test_shift_notifier --test')
-            self.stdout.write('  python manage.py test_shift_notifier --start')
-            self.stdout.write('  python manage.py test_shift_notifier --end')
-            self.stdout.write('  python manage.py test_shift_notifier --stats')
+            self.print_usage()
+
+    def print_usage(self):
+        self.stdout.write(self.style.WARNING('Please specify an option:\n'))
+        self.stdout.write('  --check          Check Telegram connection')
+        self.stdout.write('  --test           Send test message')
+        self.stdout.write('  --login <id>     Simulate cashier login')
+        self.stdout.write('  --logout <id>    Simulate cashier logout')
+        self.stdout.write('  --status         Show current shift status')
+        self.stdout.write('  --pending        Process pending notifications')
 
     def check_connection(self):
-        self.stdout.write('Checking Telegram connection...')
+        """Check Telegram API connectivity."""
+        from main.services.shift_notification_service import TelegramService, get_uzb_time, BOT_TOKEN, CHAT_ID
         
-        telegram = get_telegram_service()
+        self.stdout.write('Checking Telegram connection...\n')
+        self.stdout.write(f'Bot Token: {BOT_TOKEN[:20]}...')
+        self.stdout.write(f'Chat ID: {CHAT_ID}')
+        self.stdout.write(f'Current time (UZB): {get_uzb_time().strftime("%Y-%m-%d %H:%M:%S")}')
         
-        self.stdout.write(f'Bot Token: {telegram.config.bot_token[:20]}...')
-        self.stdout.write(f'Chat ID: {telegram.config.chat_id}')
-        
-        if telegram.is_online():
-            self.stdout.write(self.style.SUCCESS('✅ Telegram API is reachable!'))
+        if TelegramService.is_online():
+            self.stdout.write(self.style.SUCCESS('\n✅ Telegram API is reachable!'))
         else:
-            self.stdout.write(self.style.ERROR('❌ Cannot reach Telegram API'))
+            self.stdout.write(self.style.ERROR('\n❌ Cannot reach Telegram API'))
 
-    def send_test_message(self):
-        self.stdout.write('Sending test message...')
+    def send_test(self):
+        """Send a test message."""
+        from main.services.shift_notification_service import TelegramService, get_uzb_time
         
-        telegram = get_telegram_service()
+        self.stdout.write('Sending test message...\n')
         
-        now = timezone.now()
-        test_message = f"""
+        now = get_uzb_time()
+        message = f"""
 🧪 <b>TEST XABAR</b>
 
-Bu test xabar Shift Notification tizimidan.
+Bu test xabar Smart POS tizimidan.
 
-✅ Agar siz buni ko'rsangiz, integratsiya ishlavotti!
+✅ Agar siz buni ko'rsangiz, integratsiya ishlayapti!
 
-⏰ Vaqt: {now.strftime('%Y-%m-%d %H:%M:%S')}
+⏰ Vaqt (UZB): {now.strftime('%Y-%m-%d %H:%M:%S')}
 """
         
-        success, error = telegram.send_message(test_message.strip())
+        success, error = TelegramService.send_message(message.strip())
         
         if success:
-            self.stdout.write(self.style.SUCCESS('✅ Test message sent successfully!'))
-            self.stdout.write('Check your Telegram!')
+            self.stdout.write(self.style.SUCCESS('✅ Test message sent! Check Telegram.'))
         else:
-            self.stdout.write(self.style.ERROR(f'❌ Failed to send: {error}'))
+            self.stdout.write(self.style.ERROR(f'❌ Failed: {error}'))
 
-    def send_shift_start(self):
-        self.stdout.write('Sending shift start notification...')
+    def simulate_login(self, user_id: int):
+        """Simulate cashier login."""
+        from main.models import User
+        from main.services.shift_notification_service import get_shift_notification_service
+        
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            self.stdout.write(self.style.ERROR(f'❌ User with ID {user_id} not found'))
+            return
+        
+        user_name = f"{user.first_name} {user.last_name}".strip() or user.email
+        self.stdout.write(f'Simulating login for: {user_name} (ID: {user_id})')
+        self.stdout.write(f'User role: {user.role}')
         
         service = get_shift_notification_service()
-        success = service.send_shift_start()
+        result = service.on_cashier_login(user_id, user_name)
         
-        if success:
-            self.stdout.write(self.style.SUCCESS('✅ Shift start notification sent!'))
-        else:
-            self.stdout.write(self.style.WARNING('⚠️ Message queued (offline mode)'))
+        self.stdout.write(f'\nResult: {result["message"]}')
+        
+        if result.get('previous_cashier'):
+            self.stdout.write(f'Previous cashier ended: {result["previous_cashier"]}')
+        
+        self.stdout.write(self.style.SUCCESS('\n✅ Done! Check Telegram.'))
 
-    def send_shift_end(self):
-        self.stdout.write('Sending shift end notification...')
+    def simulate_logout(self, user_id: int):
+        """Simulate cashier logout."""
+        from main.services.shift_notification_service import get_shift_notification_service
+        
+        self.stdout.write(f'Simulating logout for user ID: {user_id}')
         
         service = get_shift_notification_service()
-        success = service.send_shift_end()
+        result = service.on_cashier_logout(user_id)
         
-        if success:
-            self.stdout.write(self.style.SUCCESS('✅ Shift end notification sent!'))
+        self.stdout.write(f'\nResult: {result["message"]}')
+        
+        if result.get('notification_sent'):
+            self.stdout.write(self.style.SUCCESS('\n✅ Done! Check Telegram.'))
         else:
-            self.stdout.write(self.style.WARNING('⚠️ Message queued (offline mode)'))
+            self.stdout.write(self.style.WARNING('\n⚠️ No notification was sent.'))
 
-    def show_stats(self):
-        self.stdout.write('Fetching today\'s statistics...\n')
+    def show_status(self):
+        """Show current shift status."""
+        from main.services.shift_notification_service import get_shift_notification_service, PendingQueue
+        
+        self.stdout.write('Current Shift Status\n')
+        self.stdout.write('=' * 40)
         
         service = get_shift_notification_service()
-        start_time, end_time = service.get_shift_times()
-        stats = service.get_shift_statistics(start_time, end_time)
+        session_info = service.get_current_session_info()
         
-        self.stdout.write('=' * 40)
-        self.stdout.write(f'📅 Date: {timezone.now().strftime("%Y-%m-%d")}')
-        self.stdout.write(f'⏰ Shift: {start_time.strftime("%H:%M")} - {end_time.strftime("%H:%M")}')
-        self.stdout.write('=' * 40)
-        self.stdout.write(f'📦 Total Orders: {stats.total_orders}')
-        self.stdout.write(f'✅ Paid: {stats.paid_orders}')
-        self.stdout.write(f'❌ Unpaid: {stats.unpaid_orders}')
-        self.stdout.write(f'🚫 Cancelled: {stats.cancelled_orders}')
-        self.stdout.write(f'💰 Total Revenue: {stats.total_revenue:,.0f} UZS')
-        self.stdout.write('=' * 40)
-        
-        if stats.cashier_stats:
-            self.stdout.write('\n👤 Cashiers:')
-            for cs in stats.cashier_stats:
-                name = f"{cs['cashier__first_name']} {cs['cashier__last_name']}"
-                revenue = cs['revenue'] or 0
-                self.stdout.write(f'   • {name}: {cs["order_count"]} orders / {revenue:,.0f} UZS')
+        if session_info:
+            self.stdout.write(self.style.SUCCESS('\n🟢 SHIFT ACTIVE'))
+            self.stdout.write(f'  Cashier: {session_info["user_name"]}')
+            self.stdout.write(f'  User ID: {session_info["user_id"]}')
+            self.stdout.write(f'  Login time: {session_info["login_time"]}')
+            self.stdout.write(f'  Duration: {session_info["duration"]}')
         else:
-            self.stdout.write('\nNo cashier data available.')
+            self.stdout.write(self.style.WARNING('\n🔴 NO ACTIVE SHIFT'))
+        
+        pending_count = PendingQueue.count()
+        self.stdout.write(f'\n📬 Pending notifications: {pending_count}')
+
+    def process_pending(self):
+        """Process pending notifications."""
+        from main.services.shift_notification_service import get_shift_notification_service
+        
+        self.stdout.write('Processing pending notifications...\n')
+        
+        service = get_shift_notification_service()
+        sent, failed = service.process_pending()
+        
+        self.stdout.write(f'Sent: {sent}')
+        self.stdout.write(f'Failed/Remaining: {failed}')
+        
+        if sent > 0:
+            self.stdout.write(self.style.SUCCESS(f'\n✅ Sent {sent} pending notifications'))

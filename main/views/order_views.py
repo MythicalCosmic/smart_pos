@@ -79,12 +79,12 @@ def create_order(request):
             message='Invalid order type'
         )
     
-    if order_type == 'DELIVERY' and not delivery_person_id:
-       if not delivery_person_id:
-            return APIResponse.validation_error(
-                errors={'delivery_person_id': 'Delivery person ID is required for delivery orders'},
-             message='Delivery Person ID required for delivery'
-            )
+    # if order_type == 'DELIVERY' and not delivery_person_id:
+    #    if not delivery_person_id:
+    #         return APIResponse.validation_error(
+    #             errors={'delivery_person_id': 'Delivery person ID is required for delivery orders'},
+    #          message='Delivery Person ID required for delivery'
+    #         )
     
     for idx, item in enumerate(items):
         if 'product_id' not in item:

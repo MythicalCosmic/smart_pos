@@ -13,6 +13,8 @@ class AuthService:
     JWT_ALGORITHM = 'HS256'
     JWT_EXPIRY_DAYS = 365
     
+    SHIFT_ROLES = [User.RoleChoices.CASHIER]
+    
     @classmethod
     @transaction.atomic
     def register(cls, first_name, last_name, email, password, ip_address, user_agent='Chrome'):
@@ -86,6 +88,9 @@ class AuthService:
                 last_login_api=ip_address
             )
             
+            if user.role in cls.SHIFT_ROLES:
+                cls._notify_shift_start(user)
+            
             return {'success': True, 'token': token, 'user': user, 'message': 'Login successful'}
             
         except User.DoesNotExist:
@@ -99,6 +104,9 @@ class AuthService:
             user = cls._verify_token(token)
             if not user:
                 return {'success': False, 'message': 'Invalid token'}
+            
+            if user.role in cls.SHIFT_ROLES:
+                cls._notify_shift_end(user)
             
             Session.objects.filter(user_id=user).delete()
             return {'success': True, 'message': 'Logged out successfully'}
@@ -168,3 +176,33 @@ class AuthService:
     @classmethod
     def is_admin(cls, user):
         return user.role in [User.RoleChoices.ADMIN, User.RoleChoices.RESELLER]
+    @classmethod
+    def _notify_shift_start(cls, user):
+            from threading import Thread
+            
+            def send():
+                try:
+                    from main.services.shift_notification_service import get_shift_notification_service  # <-- CHANGED
+                    service = get_shift_notification_service()
+                    user_name = f"{user.first_name} {user.last_name}".strip() or user.email
+                    service.on_cashier_login(user.id, user_name)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Shift notification error: {e}")
+            
+            Thread(target=send, daemon=True).start()
+
+    @classmethod
+    def _notify_shift_end(cls, user):
+            from threading import Thread
+            
+            def send():
+                try:
+                    from main.services.shift_notification_service import get_shift_notification_service  # <-- CHANGED
+                    service = get_shift_notification_service()
+                    service.on_cashier_logout(user.id)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Shift notification error: {e}")
+            
+            Thread(target=send, daemon=True).start()

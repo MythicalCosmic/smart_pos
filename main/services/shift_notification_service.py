@@ -1,119 +1,344 @@
+"""
+Shift Notification Service
+Handles cashier login/logout notifications with order statistics.
+Admins receive notifications via Telegram with stickers!
+
+Usage:
+    from main.services.shift_notification_service import get_shift_notification_service
+    
+    service = get_shift_notification_service()
+    service.on_cashier_login(user_id, user_name)
+    service.on_cashier_logout(user_id)
+"""
+
+import json
 import logging
-from datetime import datetime, time, timedelta
+import requests
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
-from typing import Optional, Tuple
+from pathlib import Path
+from typing import Optional, Tuple, List
 from dataclasses import dataclass
 
-from django.db.models import Sum, Countw
-from django.utils import timezone
-
-from main.services.telegram_service import TelegramService, get_telegram_service
-from main.services.pending_notifications import (
-    PendingNotification,
-    PendingNotificationQueue,
-    get_notification_queue
-)
+from django.db.models import Sum
 
 logger = logging.getLogger(__name__)
 
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
 
-@dataclass
-class ShiftConfig:
-    start_hour: int = 8
-    start_minute: int = 0
-    end_hour: int = 17
-    end_minute: int = 0
+# Telegram Bot Config
+BOT_TOKEN = "8346442289:AAHusPm9aD_v-190cmD-XRApfFJ0UnXcrOQ"
 
+# Multiple admin chat IDs - add as many as you want!
+CHAT_IDS = [
+    6589960007, 
+    -5229490382   
+]
+
+
+STICKERS = {
+    'shift_start': 'CAACAgIAAxkBAAEQOqZpZWS4euSKl2PLZpdLttwFKa1F2AACJWIAAj12uUvJkCLvzsfVXDgE',  # Happy/Start work
+    'shift_end': 'CAACAgIAAxkBAAEQOqxpZWT2il8UsiHpQi07tIWe93jR0wAChmAAAqdiuUu0SVLALPDTHzgE',    # Bye/Rest
+    'shift_switch': 'CAACAgIAAxkBAAEQOqppZWTpPjzqPEsc4fAxS3tI4wqrngACQWcAAqBFuUty6UbBXMMhVTgE',  # Handshake/Switch
+    'good_stats': 'CAACAgIAAxkBAAEQOqZpZWS4euSKl2PLZpdLttwFKa1F2AACJWIAAj12uUvJkCLvzsfVXDgE',   # Celebration
+    'neutral_stats': 'CAACAgIAAxkBAAEQOqhpZWTSsEDpaDtR7BGRoIrka3HGkQACtGUAAisBuUtbDAYh4513yTgE', # Thumbs up
+}
+
+# Uzbekistan timezone (UTC+5)
+UZB_OFFSET = timedelta(hours=5)
+UZB_TZ = timezone(UZB_OFFSET)
+
+# Storage files (will be created in project root)
+SESSION_FILE = "active_session.json"
+PENDING_FILE = "pending_notifications.json"
+
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+def get_uzb_time() -> datetime:
+    """Get current time in Uzbekistan timezone."""
+    return datetime.now(UZB_TZ)
+
+
+def format_uzb_datetime(dt: datetime = None) -> tuple[str, str]:
+    """Format datetime for Uzbekistan. Returns: (date_str, time_str)"""
+    if dt is None:
+        dt = get_uzb_time()
+    elif dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UZB_TZ)
+    else:
+        dt = dt.astimezone(UZB_TZ)
+    return dt.strftime('%Y-%m-%d'), dt.strftime('%H:%M:%S')
+
+
+# =============================================================================
+# TELEGRAM SERVICE (supports multiple chat IDs)
+# =============================================================================
+
+class TelegramService:
+    """Telegram service for sending messages and stickers to multiple admins."""
+    
+    @staticmethod
+    def send_message(text: str) -> tuple[bool, Optional[str]]:
+        """Send message to all admin chats. Returns (success, error_message)."""
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        
+        all_success = True
+        last_error = None
+        
+        for chat_id in CHAT_IDS:
+            payload = {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML"
+            }
+            
+            try:
+                response = requests.post(url, json=payload, timeout=10)
+                if response.status_code == 200:
+                    logger.info(f"Message sent to {chat_id}")
+                else:
+                    all_success = False
+                    last_error = f"API error for {chat_id}: {response.status_code}"
+                    logger.warning(last_error)
+            except requests.exceptions.ConnectionError:
+                all_success = False
+                last_error = "No internet connection"
+            except requests.exceptions.Timeout:
+                all_success = False
+                last_error = "Request timeout"
+            except Exception as e:
+                all_success = False
+                last_error = str(e)
+        
+        return all_success, last_error
+    
+    @staticmethod
+    def send_sticker(sticker_id: str) -> tuple[bool, Optional[str]]:
+        """Send sticker to all admin chats. Returns (success, error_message)."""
+        if not sticker_id:
+            return True, None
+            
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendSticker"
+        
+        all_success = True
+        last_error = None
+        
+        for chat_id in CHAT_IDS:
+            payload = {
+                "chat_id": chat_id,
+                "sticker": sticker_id
+            }
+            
+            try:
+                response = requests.post(url, json=payload, timeout=10)
+                if response.status_code == 200:
+                    logger.info(f"Sticker sent to {chat_id}")
+                else:
+                    all_success = False
+                    last_error = f"Sticker API error for {chat_id}: {response.status_code}"
+                    logger.warning(last_error)
+            except Exception as e:
+                all_success = False
+                last_error = str(e)
+        
+        return all_success, last_error
+    
+    @staticmethod
+    def is_online() -> bool:
+        """Check if Telegram is reachable."""
+        try:
+            response = requests.get(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/getMe",
+                timeout=5
+            )
+            return response.status_code == 200
+        except:
+            return False
+
+
+# =============================================================================
+# SESSION TRACKER
+# =============================================================================
+
+class SessionTracker:
+    """Tracks active cashier sessions using file storage."""
+    
+    @staticmethod
+    def _read() -> Optional[dict]:
+        try:
+            path = Path(SESSION_FILE)
+            if path.exists():
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return data if data else None
+        except:
+            pass
+        return None
+    
+    @staticmethod
+    def _write(data: Optional[dict]):
+        with open(SESSION_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    @classmethod
+    def get_session(cls) -> Optional[dict]:
+        return cls._read()
+    
+    @classmethod
+    def set_session(cls, user_id: int, user_name: str) -> dict:
+        session = {
+            "user_id": user_id,
+            "user_name": user_name,
+            "login_time": get_uzb_time().isoformat()
+        }
+        cls._write(session)
+        logger.info(f"Session started: {user_name} (ID: {user_id})")
+        return session
+    
+    @classmethod
+    def clear_session(cls) -> Optional[dict]:
+        old = cls._read()
+        cls._write(None)
+        if old:
+            logger.info(f"Session cleared: {old['user_name']}")
+        return old
+
+
+# =============================================================================
+# PENDING QUEUE (for offline support)
+# =============================================================================
+
+class PendingQueue:
+    """Queue for offline notifications."""
+    
+    @staticmethod
+    def _read() -> list:
+        try:
+            path = Path(PENDING_FILE)
+            if path.exists():
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f) or []
+        except:
+            pass
+        return []
+    
+    @staticmethod
+    def _write(data: list):
+        with open(PENDING_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    @classmethod
+    def add(cls, message: str, notification_type: str, sticker_id: str = None):
+        queue = cls._read()
+        queue.append({
+            "message": message,
+            "type": notification_type,
+            "sticker_id": sticker_id,
+            "created_at": get_uzb_time().isoformat()
+        })
+        cls._write(queue)
+        logger.info(f"Queued notification: {notification_type}")
+    
+    @classmethod
+    def get_all(cls) -> list:
+        return cls._read()
+    
+    @classmethod
+    def clear(cls):
+        cls._write([])
+    
+    @classmethod
+    def count(cls) -> int:
+        return len(cls._read())
+
+
+# =============================================================================
+# SHIFT STATISTICS
+# =============================================================================
 
 @dataclass
 class ShiftStats:
+    """Statistics for a shift period."""
     total_orders: int
     total_revenue: Decimal
     paid_orders: int
     unpaid_orders: int
     cancelled_orders: int
-    cashier_stats: list
+    duration_minutes: int
 
+
+# =============================================================================
+# MAIN SERVICE
+# =============================================================================
 
 class ShiftNotificationService:
+    """
+    Service for managing cashier shift notifications.
+    Sends start/end/switch messages to admin Telegram with stickers!
+    """
     
+    # Message Templates (in Uzbek)
     SHIFT_START_TEMPLATE = """
 🟢 <b>SMENA BOSHLANDI</b>
 
+👤 Kassir: <b>{cashier_name}</b>
 📅 Sana: {date}
 ⏰ Vaqt: {time}
 
-Yaxshi ish kuningiz bo'lsin! 💪
+Yaxshi ish kunini tilaymiz! 💪
 """
 
     SHIFT_END_TEMPLATE = """
 🔴 <b>SMENA TUGADI</b>
 
+👤 Kassir: <b>{cashier_name}</b>
 📅 Sana: {date}
 ⏰ Vaqt: {time}
+⏱ Davomiyligi: <b>{duration}</b>
 
-📊 <b>Bugungi statistika:</b>
+Rahmat, dam oling! 🌙
+"""
+
+    STATISTICS_TEMPLATE = """
+📊 <b>{cashier_name} - SMENA STATISTIKASI</b>
+
+⏱ Davomiyligi: <b>{duration}</b>
 ━━━━━━━━━━━━━━━━━━━━━
 📦 Jami buyurtmalar: <b>{total_orders}</b>
 ✅ To'langan: <b>{paid_orders}</b>
 ❌ To'lanmagan: <b>{unpaid_orders}</b>
 🚫 Bekor qilingan: <b>{cancelled_orders}</b>
-
-💰 <b>Jami tushum: {total_revenue:,.0f} UZS</b>
 ━━━━━━━━━━━━━━━━━━━━━
-
-{cashier_section}
-
-Dam oling, ertaga ko'rishamiz! 🌙
+💰 <b>Jami tushum: {total_revenue:,.0f} UZS</b>
 """
 
-    CASHIER_STATS_TEMPLATE = """
-👤 <b>Kassirlar bo'yicha:</b>
-{cashier_lines}
+    SHIFT_SWITCH_TEMPLATE = """
+🔄 <b>SMENA ALMASHDI</b>
+
+🔴 Chiqdi: <b>{old_cashier}</b>
+🟢 Kirdi: <b>{new_cashier}</b>
+
+📅 Sana: {date}
+⏰ Vaqt: {time}
 """
 
-    def __init__(
-        self,
-        telegram_service: Optional[TelegramService] = None,
-        notification_queue: Optional[PendingNotificationQueue] = None,
-        shift_config: Optional[ShiftConfig] = None
-    ):
-        self.telegram = telegram_service or get_telegram_service()
-        self.queue = notification_queue or get_notification_queue()
-        self.config = shift_config or ShiftConfig()
-    
-    def get_shift_times(self, date: datetime = None) -> Tuple[datetime, datetime]:
-        if date is None:
-            date = timezone.now()
-        
-        start = timezone.make_aware(
-            datetime.combine(
-                date.date(),
-                time(self.config.start_hour, self.config.start_minute)
-            )
-        ) if timezone.is_naive(date) else date.replace(
-            hour=self.config.start_hour,
-            minute=self.config.start_minute,
-            second=0,
-            microsecond=0
-        )
-        
-        end = timezone.make_aware(
-            datetime.combine(
-                date.date(),
-                time(self.config.end_hour, self.config.end_minute)
-            )
-        ) if timezone.is_naive(date) else date.replace(
-            hour=self.config.end_hour,
-            minute=self.config.end_minute,
-            second=0,
-            microsecond=0
-        )
-        
-        return start, end
-    
-    def get_shift_statistics(self, start_time: datetime, end_time: datetime) -> ShiftStats:
+    def get_shift_statistics(self, start_time: datetime, end_time: datetime = None) -> ShiftStats:
+        """Calculate order statistics for a shift period."""
         from main.models import Order
+        
+        if end_time is None:
+            end_time = get_uzb_time()
+        
+        # Handle timezone
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=UZB_TZ)
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=UZB_TZ)
         
         orders = Order.objects.filter(
             created_at__gte=start_time,
@@ -129,16 +354,7 @@ Dam oling, ertaga ko'rishamiz! 🌙
             total=Sum('total_amount')
         )['total'] or Decimal('0.00')
         
-        # Cashier statistics
-        cashier_stats = list(
-            orders.filter(cashier__isnull=False)
-            .values('cashier__first_name', 'cashier__last_name')
-            .annotate(
-                order_count=Count('id'),
-                revenue=Sum('total_amount')
-            )
-            .order_by('-revenue')
-        )
+        duration_minutes = int((end_time - start_time).total_seconds() / 60)
         
         return ShiftStats(
             total_orders=total_orders,
@@ -146,112 +362,263 @@ Dam oling, ertaga ko'rishamiz! 🌙
             paid_orders=paid_orders,
             unpaid_orders=unpaid_orders,
             cancelled_orders=cancelled_orders,
-            cashier_stats=cashier_stats
+            duration_minutes=duration_minutes
         )
     
-    def format_shift_start_message(self) -> str:
-        now = timezone.now()
-        return self.SHIFT_START_TEMPLATE.format(
-            date=now.strftime("%Y-%m-%d"),
-            time=now.strftime("%H:%M")
-        ).strip()
+    def _format_duration(self, minutes: int) -> str:
+        """Format duration in hours and minutes."""
+        if minutes < 60:
+            return f"{minutes} daqiqa"
+        hours = minutes // 60
+        mins = minutes % 60
+        if mins == 0:
+            return f"{hours} soat"
+        return f"{hours} soat {mins} daqiqa"
     
-    def format_shift_end_message(self, stats: ShiftStats) -> str:
-        now = timezone.now()
+    def _parse_login_time(self, iso_string: str) -> datetime:
+        """Parse ISO format login time."""
+        dt = datetime.fromisoformat(iso_string)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UZB_TZ)
+        return dt
+    
+    def _get_stats_sticker(self, stats: ShiftStats) -> str:
+        """Get appropriate sticker based on stats."""
+        # Good day: 10+ orders or 500k+ revenue
+        if stats.total_orders >= 10 or stats.total_revenue >= 500000:
+            return STICKERS.get('good_stats')
+        return STICKERS.get('neutral_stats')
+    
+    # =========================================================================
+    # PUBLIC API
+    # =========================================================================
+    
+    def on_cashier_login(self, user_id: int, user_name: str) -> dict:
+        """
+        Handle cashier login event.
+        If another cashier was active, end their shift first.
+        """
+        current_session = SessionTracker.get_session()
+        result = {
+            'success': True,
+            'message': '',
+            'previous_cashier': None
+        }
         
-        cashier_section = ""
-        if stats.cashier_stats:
-            cashier_lines = []
-            for cs in stats.cashier_stats:
-                name = f"{cs['cashier__first_name']} {cs['cashier__last_name']}"
-                revenue = cs['revenue'] or Decimal('0')
-                cashier_lines.append(
-                    f"  • {name}: {cs['order_count']} ta / {revenue:,.0f} UZS"
-                )
-            cashier_section = self.CASHIER_STATS_TEMPLATE.format(
-                cashier_lines="\n".join(cashier_lines)
-            )
+        # Same user logging in again - no action needed
+        if current_session and current_session['user_id'] == user_id:
+            result['message'] = 'Same cashier already logged in'
+            return result
         
-        return self.SHIFT_END_TEMPLATE.format(
-            date=now.strftime("%Y-%m-%d"),
-            time=now.strftime("%H:%M"),
+        # Different cashier was active - send shift switch
+        if current_session:
+            self._send_shift_switch(current_session, user_id, user_name)
+            result['previous_cashier'] = current_session['user_name']
+        else:
+            # No previous session - just start new shift
+            self._send_shift_start(user_name)
+        
+        # Set new active session
+        SessionTracker.set_session(user_id, user_name)
+        result['message'] = f'Shift started for {user_name}'
+        
+        return result
+    
+    def on_cashier_logout(self, user_id: int) -> dict:
+        """Handle cashier logout event."""
+        current_session = SessionTracker.get_session()
+        result = {
+            'success': True,
+            'message': '',
+            'notification_sent': False
+        }
+        
+        if not current_session:
+            result['message'] = 'No active session to end'
+            return result
+        
+        if current_session['user_id'] != user_id:
+            result['message'] = 'Different cashier is currently active'
+            return result
+        
+        # Send shift end notification
+        self._send_shift_end(current_session)
+        SessionTracker.clear_session()
+        
+        result['message'] = f'Shift ended for {current_session["user_name"]}'
+        result['notification_sent'] = True
+        
+        return result
+    
+    def get_current_session_info(self) -> Optional[dict]:
+        """Get info about current active session."""
+        session = SessionTracker.get_session()
+        if not session:
+            return None
+        
+        start_time = self._parse_login_time(session['login_time'])
+        now = get_uzb_time()
+        duration_minutes = int((now - start_time).total_seconds() / 60)
+        
+        return {
+            'user_id': session['user_id'],
+            'user_name': session['user_name'],
+            'login_time': session['login_time'],
+            'duration': self._format_duration(duration_minutes),
+            'duration_minutes': duration_minutes
+        }
+    
+    def process_pending(self) -> Tuple[int, int]:
+        """Process pending notifications."""
+        if not TelegramService.is_online():
+            return 0, 0
+        
+        pending = PendingQueue.get_all()
+        if not pending:
+            return 0, 0
+        
+        sent = 0
+        for notif in pending:
+            # Send sticker first if exists
+            if notif.get('sticker_id'):
+                TelegramService.send_sticker(notif['sticker_id'])
+            
+            success, _ = TelegramService.send_message(notif['message'])
+            if success:
+                sent += 1
+            else:
+                break
+        
+        if sent == len(pending):
+            PendingQueue.clear()
+        
+        return sent, len(pending) - sent
+    
+    # =========================================================================
+    # PRIVATE METHODS
+    # =========================================================================
+    
+    def _send_shift_start(self, user_name: str) -> bool:
+        """Send shift start notification with sticker."""
+        date_str, time_str = format_uzb_datetime()
+        
+        message = self.SHIFT_START_TEMPLATE.format(
+            cashier_name=user_name,
+            date=date_str,
+            time=time_str
+        ).strip()
+        
+        # Send sticker first
+        sticker_id = STICKERS.get('shift_start')
+        if sticker_id:
+            TelegramService.send_sticker(sticker_id)
+        
+        success, error = TelegramService.send_message(message)
+        
+        if not success:
+            PendingQueue.add(message, "shift_start", sticker_id)
+        
+        return success
+    
+    def _send_shift_end(self, session: dict) -> bool:
+        """Send statistics first, then shift end notification."""
+        date_str, time_str = format_uzb_datetime()
+        start_time = self._parse_login_time(session['login_time'])
+        stats = self.get_shift_statistics(start_time)
+        
+        # 1. Send statistics message first
+        stats_message = self.STATISTICS_TEMPLATE.format(
+            cashier_name=session['user_name'],
+            duration=self._format_duration(stats.duration_minutes),
             total_orders=stats.total_orders,
             paid_orders=stats.paid_orders,
             unpaid_orders=stats.unpaid_orders,
             cancelled_orders=stats.cancelled_orders,
-            total_revenue=stats.total_revenue,
-            cashier_section=cashier_section
+            total_revenue=stats.total_revenue
         ).strip()
-    
-    def send_shift_start(self) -> bool:
-        message = self.format_shift_start_message()
-        success, error = self.telegram.send_message(message)
+        
+        # Send stats sticker
+        stats_sticker = self._get_stats_sticker(stats)
+        if stats_sticker:
+            TelegramService.send_sticker(stats_sticker)
+        
+        TelegramService.send_message(stats_message)
+        
+        # 2. Send shift end message
+        end_message = self.SHIFT_END_TEMPLATE.format(
+            cashier_name=session['user_name'],
+            date=date_str,
+            time=time_str,
+            duration=self._format_duration(stats.duration_minutes)
+        ).strip()
+        
+        # Send end sticker
+        end_sticker = STICKERS.get('shift_end')
+        if end_sticker:
+            TelegramService.send_sticker(end_sticker)
+        
+        success, error = TelegramService.send_message(end_message)
         
         if not success:
-            self._queue_notification(message, "shift_start")
-            logger.warning(f"Queued shift start notification: {error}")
+            PendingQueue.add(end_message, "shift_end", end_sticker)
         
         return success
     
-    def send_shift_end(self) -> bool:
-        start_time, end_time = self.get_shift_times()
-        stats = self.get_shift_statistics(start_time, end_time)
-        message = self.format_shift_end_message(stats)
+    def _send_shift_switch(self, old_session: dict, new_user_id: int, new_user_name: str) -> bool:
+        """Send statistics first, then shift switch notification."""
+        date_str, time_str = format_uzb_datetime()
+        start_time = self._parse_login_time(old_session['login_time'])
+        stats = self.get_shift_statistics(start_time)
         
-        success, error = self.telegram.send_message(message)
+        # 1. Send statistics for old cashier first
+        stats_message = self.STATISTICS_TEMPLATE.format(
+            cashier_name=old_session['user_name'],
+            duration=self._format_duration(stats.duration_minutes),
+            total_orders=stats.total_orders,
+            paid_orders=stats.paid_orders,
+            unpaid_orders=stats.unpaid_orders,
+            cancelled_orders=stats.cancelled_orders,
+            total_revenue=stats.total_revenue
+        ).strip()
+        
+        # Send stats sticker
+        stats_sticker = self._get_stats_sticker(stats)
+        if stats_sticker:
+            TelegramService.send_sticker(stats_sticker)
+        
+        TelegramService.send_message(stats_message)
+        
+        # 2. Send shift switch message
+        switch_message = self.SHIFT_SWITCH_TEMPLATE.format(
+            old_cashier=old_session['user_name'],
+            new_cashier=new_user_name,
+            date=date_str,
+            time=time_str
+        ).strip()
+        
+        # Send switch sticker
+        switch_sticker = STICKERS.get('shift_switch')
+        if switch_sticker:
+            TelegramService.send_sticker(switch_sticker)
+        
+        success, error = TelegramService.send_message(switch_message)
         
         if not success:
-            self._queue_notification(message, "shift_end", priority=3)
-            logger.warning(f"Queued shift end notification: {error}")
+            PendingQueue.add(switch_message, "shift_switch", switch_sticker)
         
         return success
-    
-    def _queue_notification(
-        self,
-        message: str,
-        notification_type: str,
-        priority: int = 2
-    ) -> None:
-        notification = PendingNotification(
-            message=message,
-            created_at=timezone.now().isoformat(),
-            notification_type=notification_type,
-            priority=priority
-        )
-        self.queue.add(notification)
-    
-    def process_pending_notifications(self) -> Tuple[int, int]:
 
-        if not self.telegram.is_online():
-            logger.info("Telegram not reachable, skipping pending notifications")
-            return 0, 0
-        
-        pending = self.queue.get_all()
-        sent = 0
-        failed = 0
 
-        pending_sorted = sorted(
-            enumerate(pending),
-            key=lambda x: (-x[1].priority, x[1].created_at)
-        )
-        
-        indices_to_remove = []
-        
-        for original_index, notification in pending_sorted:
-            success, _ = self.telegram.send_message(notification.message)
-            if success:
-                sent += 1
-                indices_to_remove.append(original_index)
-                logger.info(f"Sent pending notification: {notification.notification_type}")
-            else:
-                failed += 1
-                break  
-        
-        for index in sorted(indices_to_remove, reverse=True):
-            self.queue.remove(index)
-        
-        return sent, failed
+# =============================================================================
+# FACTORY FUNCTION
+# =============================================================================
+
+_service_instance: Optional[ShiftNotificationService] = None
 
 
 def get_shift_notification_service() -> ShiftNotificationService:
-    return ShiftNotificationService()
+    """Get the shift notification service instance."""
+    global _service_instance
+    if _service_instance is None:
+        _service_instance = ShiftNotificationService()
+    return _service_instance
