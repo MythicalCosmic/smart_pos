@@ -1,20 +1,39 @@
-from django.db.models import Q, Sum, Count, Max, F, DecimalField
+from django.db.models import Sum, F, DecimalField
 from django.core.paginator import Paginator
-from django.core.cache import cache
 from django.db import transaction
 from decimal import Decimal
-from main.models import Order, OrderItem, Product, User, Category, DeliveryPerson
+from main.models import Order, OrderItem, Product, User, DeliveryPerson
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models.functions import Coalesce
 from .inkassa_service import InkassaService
-from django.db import transaction
+from threading import Thread
+
+
+def _notify_order(event: str, order=None, order_id=None):
+    def send():
+        try:
+            from main.services.order_notification_service import get_order_notification_service
+            svc = get_order_notification_service()
+            if event == 'new' and order:
+                fresh_order = Order.objects.select_related('cashier').prefetch_related('items__product').get(id=order.id)
+                svc.on_new_order(fresh_order)
+            elif event == 'ready' and order_id:
+                svc.on_order_ready(order_id)
+            elif event == 'cancelled' and order_id:
+                svc.on_order_cancelled(order_id)
+            elif event == 'status_change' and order_id:
+                order_obj = Order.objects.get(id=order_id)
+                svc.on_order_status_change(order_id, order_obj.status)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Order notification error: {e}")
+    Thread(target=send, daemon=True).start()
 
 
 class OrderService:
     
     ALLOWED_STATUSES = ['PREPARING', 'READY', 'CANCELLED']
-
 
     @staticmethod
     def parse_array_param(param):
@@ -28,25 +47,16 @@ class OrderService:
     @staticmethod
     @transaction.atomic
     def _get_next_display_id():
-        last = (
-            Order.objects
-            .select_for_update()
-            .order_by('-id')
-            .only('display_id')
-            .first()
-        )
-
+        last = Order.objects.select_for_update().order_by('-id').only('display_id').first()
         if not last or not last.display_id:
             return 1
-
         return (last.display_id % 100) + 1
-    
     
     @staticmethod
     def get_all_orders(page=1, per_page=20, statuses=None, payment_status=None, 
                        category_ids=None, user_id=None, cashier_id=None, order_by='-created_at'):
         
-        queryset = Order.objects.select_related('user', 'cashier').prefetch_related('items__product').all()
+        queryset = Order.objects.select_related('cashier').prefetch_related('items__product__category')
 
         if payment_status:
             payment_status = payment_status.strip().upper()
@@ -68,11 +78,9 @@ class OrderService:
             if category_ids_list:
                 try:
                     category_ids_int = [int(cid) for cid in category_ids_list]
-                    queryset = queryset.filter(
-                        items__product__category_id__in=category_ids_int
-                    ).distinct()
+                    queryset = queryset.filter(items__product__category_id__in=category_ids_int).distinct()
                 except ValueError:
-                    pass  
+                    pass
 
         if user_id:
             queryset = queryset.filter(user_id=user_id)
@@ -81,7 +89,6 @@ class OrderService:
             queryset = queryset.filter(cashier_id=cashier_id)
         
         queryset = queryset.order_by(order_by)
-        
         paginator = Paginator(queryset, per_page)
         page_obj = paginator.get_page(page)
         
@@ -93,11 +100,6 @@ class OrderService:
                 'order_type': order.order_type,
                 'phone_number': order.phone_number,
                 'description': order.description,
-                'user': {
-                    'id': order.user.id,
-                    'name': f"{order.user.first_name} {order.user.last_name}",
-                    'email': order.user.email
-                },
                 'cashier': {
                     'id': order.cashier.id,
                     'name': f"{order.cashier.first_name} {order.cashier.last_name}"
@@ -107,14 +109,8 @@ class OrderService:
                 'total_amount': str(order.total_amount),
                 'items_count': order.items.count(),
                 'items': list(order.items.values(
-                    'id',
-                    'product__id',
-                    'product__name',
-                    'product__category__id',
-                    'product__category__name',
-                    'quantity',
-                    'price',
-                    'ready_at'
+                    'id', 'product__id', 'product__name', 'product__category__id',
+                    'product__category__name', 'quantity', 'price', 'ready_at'
                 )),
                 'paid_at': order.paid_at.isoformat() if order.paid_at else None,
                 'ready_at': order.ready_at,
@@ -122,7 +118,7 @@ class OrderService:
                 'updated_at': order.updated_at.isoformat()
             })
         
-        result = {
+        return {
             'orders': orders,
             'filters': {
                 'statuses': OrderService.parse_array_param(statuses),
@@ -138,8 +134,6 @@ class OrderService:
                 'has_previous': page_obj.has_previous()
             }
         }
-        return result
-    
 
     @staticmethod
     def get_order_by_id(order_id):
@@ -148,10 +142,7 @@ class OrderService:
             
             items = []
             for item in order.items.all():
-                prep_time = None
-                if item.ready_at:
-                    prep_time = (item.ready_at - order.created_at).total_seconds()
-                
+                prep_time = (item.ready_at - order.created_at).total_seconds() if item.ready_at else None
                 items.append({
                     'id': item.id,
                     'product': {
@@ -168,11 +159,9 @@ class OrderService:
                     'preparation_time_formatted': OrderService._format_duration(prep_time) if prep_time else None
                 })
             
-            order_prep_time = None
-            if order.ready_at:
-                order_prep_time = (order.ready_at - order.created_at).total_seconds()
+            order_prep_time = (order.ready_at - order.created_at).total_seconds() if order.ready_at else None
             
-            result = {
+            return {
                 'success': True,
                 'order': {
                     'id': order.id,
@@ -203,8 +192,6 @@ class OrderService:
                     'preparation_time_formatted': OrderService._format_duration(order_prep_time) if order_prep_time else None
                 }
             }
-            
-            return result
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
     
@@ -212,17 +199,14 @@ class OrderService:
     def _format_duration(seconds):
         if seconds is None:
             return None
-        
         seconds = int(seconds)
         hours, remainder = divmod(seconds, 3600)
         minutes, secs = divmod(remainder, 60)
-        
         if hours > 0:
             return f"{hours}h {minutes}m {secs}s"
         elif minutes > 0:
             return f"{minutes}m {secs}s"
-        else:
-            return f"{secs}s"
+        return f"{secs}s"
     
     @staticmethod
     @transaction.atomic
@@ -234,11 +218,11 @@ class OrderService:
             if cashier_id and not User.objects.filter(id=cashier_id, role='CASHIER').exists():
                 return {'success': False, 'message': 'Invalid cashier'}
             
-            if not items or len(items) == 0:
+            if not items:
                 return {'success': False, 'message': 'Order must have at least one item'}
             
             if order_type not in ['HALL', 'DELIVERY', 'PICKUP']:
-                return {'success': False, 'message': 'Invalid order type. Must be HALL, DELIVERY, or PICKUP'}
+                return {'success': False, 'message': 'Invalid order type'}
 
             display_id = OrderService._get_next_display_id()
 
@@ -247,10 +231,7 @@ class OrderService:
                 try:
                     delivery_person = DeliveryPerson.objects.get(id=delivery_person_id)
                 except DeliveryPerson.DoesNotExist:
-                    return {
-                        'success': False,
-                        'message': 'Delivery person not found'
-                    }
+                    return {'success': False, 'message': 'Delivery person not found'}
             
             order = Order.objects.create(
                 user_id=user_id,
@@ -266,39 +247,39 @@ class OrderService:
             )
             
             total_amount = Decimal('0.00')
+            product_ids = [item.get('product_id') for item in items]
+            products = {p.id: p for p in Product.objects.filter(id__in=product_ids)}
             
+            order_items = []
             for item_data in items:
                 product_id = item_data.get('product_id')
-                detail = item_data.get('detail') if 'detail' in item_data else None
+                item_detail = item_data.get('detail')
                 quantity = item_data.get('quantity', 1)
                 
                 if quantity <= 0:
                     raise ValueError('Quantity must be greater than 0')
                 
-                try:
-                    product = Product.objects.get(id=product_id)
-                except Product.DoesNotExist:
+                product = products.get(product_id)
+                if not product:
                     raise ValueError(f'Product with id {product_id} not found')
                 
-                OrderItem.objects.create(
+                order_items.append(OrderItem(
                     order=order,
                     product=product,
-                    detail=detail,
+                    detail=item_detail,
                     quantity=quantity,
                     price=product.price,
-                    ready_at=None 
-                )
-                
+                    ready_at=None
+                ))
                 total_amount += product.price * quantity
             
+            OrderItem.objects.bulk_create(order_items)
             order.total_amount = total_amount
-            order.save()
+            order.save(update_fields=['total_amount'])
             
-            return {
-                'success': True,
-                'order': order,
-                'message': 'Order created successfully'
-            }
+            _notify_order('new', order=order)
+            
+            return {'success': True, 'order': order, 'message': 'Order created successfully'}
         except ValueError as e:
             return {'success': False, 'message': str(e)}
         except Exception as e:
@@ -314,20 +295,13 @@ class OrderService:
                 return {'success': False, 'message': 'Cannot modify order that is not in PREPARING status'}
             
             product = Product.objects.get(id=product_id)
-            
             existing_item = OrderItem.objects.filter(order=order, product=product, ready_at__isnull=True).first()
             
             if existing_item:
                 existing_item.quantity += quantity
-                existing_item.save()
+                existing_item.save(update_fields=['quantity'])
             else:
-                OrderItem.objects.create(
-                    order=order,
-                    product=product,
-                    quantity=quantity,
-                    price=product.price,
-                    ready_at=None
-                )
+                OrderItem.objects.create(order=order, product=product, quantity=quantity, price=product.price)
 
             if order.ready_at:
                 order.ready_at = None
@@ -335,7 +309,6 @@ class OrderService:
                 order.save(update_fields=['ready_at', 'status'])
             
             OrderService._recalculate_order_total(order)
-            
             return {'success': True, 'message': 'Item added to order successfully'}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
@@ -353,21 +326,14 @@ class OrderService:
             if order.status != 'PREPARING':
                 return {'success': False, 'message': 'Cannot modify order that is not in PREPARING status'}
             
-            item = OrderItem.objects.get(id=item_id, order=order)
-            
             if quantity <= 0:
                 return {'success': False, 'message': 'Quantity must be greater than 0'}
             
-            item.quantity = quantity
-            item.save()
-            
+            OrderItem.objects.filter(id=item_id, order=order).update(quantity=quantity)
             OrderService._recalculate_order_total(order)
-            
             return {'success': True, 'message': 'Order item updated successfully'}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
-        except OrderItem.DoesNotExist:
-            return {'success': False, 'message': 'Order item not found'}
         except Exception as e:
             return {'success': False, 'message': f'Failed to update item: {str(e)}'}
     
@@ -380,8 +346,9 @@ class OrderService:
             if order.status != 'PREPARING':
                 return {'success': False, 'message': 'Cannot modify order that is not in PREPARING status'}
             
-            item = OrderItem.objects.get(id=item_id, order=order)
-            item.delete()
+            deleted, _ = OrderItem.objects.filter(id=item_id, order=order).delete()
+            if not deleted:
+                return {'success': False, 'message': 'Order item not found'}
             
             if order.items.count() == 0:
                 order.delete()
@@ -389,12 +356,9 @@ class OrderService:
 
             OrderService._check_and_update_order_ready_status(order)
             OrderService._recalculate_order_total(order)
-            
             return {'success': True, 'message': 'Item removed from order successfully'}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
-        except OrderItem.DoesNotExist:
-            return {'success': False, 'message': 'Order item not found'}
         except Exception as e:
             return {'success': False, 'message': f'Failed to remove item: {str(e)}'}
     
@@ -404,52 +368,42 @@ class OrderService:
             order = Order.objects.get(id=order_id)
 
             if status not in OrderService.ALLOWED_STATUSES:
-                return {
-                    'success': False,
-                    'message': f'Invalid status. Allowed: {", ".join(OrderService.ALLOWED_STATUSES)}'
-                }
+                return {'success': False, 'message': f'Invalid status. Allowed: {", ".join(OrderService.ALLOWED_STATUSES)}'}
 
             if order.status == 'CANCELLED':
                 return {'success': False, 'message': 'Cannot update cancelled order'}
 
+            update_fields = ['status']
             order.status = status
 
             if status == 'READY':
-                order.ready_at = timezone.now()
-                order.items.filter(ready_at__isnull=True).update(ready_at=timezone.now())
+                now = timezone.now()
+                order.ready_at = now
+                order.items.filter(ready_at__isnull=True).update(ready_at=now)
+                update_fields.append('ready_at')
 
             if cashier_id is not None:
                 order.cashier_id = cashier_id
-
-            update_fields = ['status']
-            if status == 'READY':
-                update_fields.append('ready_at')
-            if cashier_id is not None:
                 update_fields.append('cashier_id')
 
             order.save(update_fields=update_fields)
 
-            return {
-                'success': True,
-                'message': f'Order status updated to {status}',
-                'order_id': order.id,
-                'status': status
-            }
+            if status == 'READY':
+                _notify_order('ready', order_id=order_id)
+            elif status == 'CANCELLED':
+                _notify_order('cancelled', order_id=order_id)
 
+            return {'success': True, 'message': f'Order status updated to {status}', 'order_id': order.id, 'status': status}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
-
         except Exception as e:
-            return {
-                'success': False,
-                'message': f'Failed to update status: {str(e)}'
-            }
+            return {'success': False, 'message': f'Failed to update status: {str(e)}'}
 
     @staticmethod
     @transaction.atomic
     def mark_item_ready(order_id, item_id):
         try:
-            order = Order.objects.get(id=order_id)
+            order = Order.objects.select_related('cashier').prefetch_related('items__product').get(id=order_id)
             
             if order.status == 'CANCELLED':
                 return {'success': False, 'message': 'Cannot modify cancelled order'}
@@ -457,7 +411,9 @@ class OrderService:
             if order.status == 'READY':
                 return {'success': False, 'message': 'Order is already marked as ready'}
             
-            item = OrderItem.objects.get(id=item_id, order=order)
+            item = order.items.filter(id=item_id).first()
+            if not item:
+                return {'success': False, 'message': 'Order item not found'}
             
             if item.ready_at is not None:
                 return {'success': False, 'message': 'Item is already marked as ready'}
@@ -467,27 +423,22 @@ class OrderService:
             item.save(update_fields=['ready_at'])
             
             item_prep_time = (item.ready_at - order.created_at).total_seconds()
-            
             all_items_ready, order_ready = OrderService._check_and_update_order_ready_status(order)
             
             order_prep_time = None
             if order_ready and order.ready_at:
                 order_prep_time = (order.ready_at - order.created_at).total_seconds()
+                _notify_order('ready', order_id=order_id)
 
-            items_status = []
-            for order_item in order.items.all():
-                prep_time = None
-                if order_item.ready_at:
-                    prep_time = (order_item.ready_at - order.created_at).total_seconds()
-                items_status.append({
-                    'id': order_item.id,
-                    'product_name': order_item.product.name,
-                    'quantity': order_item.quantity,
-                    'is_ready': order_item.ready_at is not None,
-                    'ready_at': order_item.ready_at.isoformat() if order_item.ready_at else None,
-                    'preparation_time_seconds': prep_time,
-                    'preparation_time_formatted': OrderService._format_duration(prep_time) if prep_time else None
-                })
+            items_status = [{
+                'id': oi.id,
+                'product_name': oi.product.name,
+                'quantity': oi.quantity,
+                'is_ready': oi.ready_at is not None,
+                'ready_at': oi.ready_at.isoformat() if oi.ready_at else None,
+                'preparation_time_seconds': (oi.ready_at - order.created_at).total_seconds() if oi.ready_at else None,
+                'preparation_time_formatted': OrderService._format_duration((oi.ready_at - order.created_at).total_seconds()) if oi.ready_at else None
+            } for oi in order.items.all()]
             
             return {
                 'success': True,
@@ -510,11 +461,8 @@ class OrderService:
                 },
                 'items_status': items_status
             }
-            
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
-        except OrderItem.DoesNotExist:
-            return {'success': False, 'message': 'Order item not found'}
         except Exception as e:
             return {'success': False, 'message': f'Failed to mark item as ready: {str(e)}'}
     
@@ -527,29 +475,18 @@ class OrderService:
             if order.status == 'CANCELLED':
                 return {'success': False, 'message': 'Cannot modify cancelled order'}
             
-            item = OrderItem.objects.get(id=item_id, order=order)
-            
-            if item.ready_at is None:
+            updated = OrderItem.objects.filter(id=item_id, order=order, ready_at__isnull=False).update(ready_at=None)
+            if not updated:
                 return {'success': False, 'message': 'Item is not marked as ready'}
             
-            item.ready_at = None
-            item.save(update_fields=['ready_at'])
             if order.status == 'READY':
                 order.status = 'PREPARING'
                 order.ready_at = None
                 order.save(update_fields=['status', 'ready_at'])
             
-            return {
-                'success': True,
-                'message': 'Item unmarked as ready',
-                'item_id': item.id,
-                'order_status': order.status
-            }
-            
+            return {'success': True, 'message': 'Item unmarked as ready', 'item_id': item_id, 'order_status': order.status}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
-        except OrderItem.DoesNotExist:
-            return {'success': False, 'message': 'Order item not found'}
         except Exception as e:
             return {'success': False, 'message': f'Failed to unmark item: {str(e)}'}
     
@@ -557,7 +494,6 @@ class OrderService:
     def _check_and_update_order_ready_status(order):
         total_items = order.items.count()
         ready_items = order.items.filter(ready_at__isnull=False).count()
-        
         all_items_ready = total_items > 0 and total_items == ready_items
         
         if all_items_ready and order.status != 'READY':
@@ -587,12 +523,7 @@ class OrderService:
 
             InkassaService.add_to_register(order.total_amount)
 
-            return {
-                'success': True,
-                'message': 'Order marked as paid',
-                'is_paid': True
-            }
-
+            return {'success': True, 'message': 'Order marked as paid', 'is_paid': True}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
 
@@ -611,11 +542,12 @@ class OrderService:
             order.status = 'READY'
             order.ready_at = now
             order.save(update_fields=['status', 'ready_at'])
-
             order.items.filter(ready_at__isnull=True).update(ready_at=now)
 
             order_prep_time = (order.ready_at - order.created_at).total_seconds()
             
+            _notify_order('ready', order_id=order_id)
+
             return {
                 'success': True, 
                 'message': 'Order marked as ready', 
@@ -633,20 +565,13 @@ class OrderService:
     def get_client_display_orders():
         five_minutes_ago = timezone.now() - timedelta(minutes=5)
 
-        processing = Order.objects.filter(
-            status='PREPARING'
-        ).select_related('user').prefetch_related('items').order_by('created_at')
-
-        finished = Order.objects.filter(
-            status='READY',
-            ready_at__gte=five_minutes_ago
-        ).select_related('user').order_by('-ready_at')
+        processing = Order.objects.filter(status='PREPARING').select_related('user').prefetch_related('items').order_by('created_at')
+        finished = Order.objects.filter(status='READY', ready_at__gte=five_minutes_ago).select_related('user').order_by('-ready_at')
         
         processing_list = []
         for order in processing:
             total_items = order.items.count()
             ready_items = order.items.filter(ready_at__isnull=False).count()
-            
             processing_list.append({
                 'id': order.id,
                 'display_id': order.display_id,
@@ -662,10 +587,7 @@ class OrderService:
         
         finished_list = []
         for order in finished:
-            order_prep_time = None
-            if order.ready_at:
-                order_prep_time = (order.ready_at - order.created_at).total_seconds()
-            
+            order_prep_time = (order.ready_at - order.created_at).total_seconds() if order.ready_at else None
             finished_list.append({
                 'id': order.id,
                 'display_id': order.display_id,
@@ -677,19 +599,11 @@ class OrderService:
                 'preparation_time_formatted': OrderService._format_duration(order_prep_time) if order_prep_time else None
             })
         
-        result = {
-            'success': True,
-            'processing': processing_list,
-            'finished': finished_list
-        }
-        
-        return result
+        return {'success': True, 'processing': processing_list, 'finished': finished_list}
     
     @staticmethod
     def get_chef_display_orders():
-        orders = Order.objects.filter(
-            status='PREPARING'
-        ).select_related('user').prefetch_related('items__product').order_by('created_at')
+        orders = Order.objects.filter(status='PREPARING').select_related('user').prefetch_related('items__product').order_by('created_at')
         
         orders_list = []
         for order in orders:
@@ -699,11 +613,7 @@ class OrderService:
                 is_ready = item.ready_at is not None
                 if is_ready:
                     ready_count += 1
-                
-                prep_time = None
-                if item.ready_at:
-                    prep_time = (item.ready_at - order.created_at).total_seconds()
-                
+                prep_time = (item.ready_at - order.created_at).total_seconds() if item.ready_at else None
                 items.append({
                     'id': item.id,
                     'product_name': item.product.name,
@@ -729,69 +639,48 @@ class OrderService:
                 'created_at': order.created_at.isoformat()
             })
         
-        result = {
-            'success': True,
-            'orders': orders_list
-        }
-        
-        return result
+        return {'success': True, 'orders': orders_list}
     
     @staticmethod
     def get_order_stats():
-        total = Order.objects.count()
-        preparing_orders = Order.objects.filter(status='PREPARING').count()
-        ready_orders = Order.objects.filter(status='READY').count()
-        cancelled_orders = Order.objects.filter(status='CANCELLED').count()
-        paid_orders = Order.objects.filter(is_paid=True).count()
-        unpaid_orders = Order.objects.filter(is_paid=False).count()
-        
-        total_revenue = Order.objects.filter(is_paid=True).aggregate(
-            total=Sum('total_amount')
-        )['total'] or Decimal('0.00')
-        
-        completed_orders = Order.objects.filter(
-            status='READY',
-            ready_at__isnull=False
+        stats = Order.objects.aggregate(
+            total=Count('id'),
+            preparing=Count('id', filter=Q(status='PREPARING')),
+            ready=Count('id', filter=Q(status='READY')),
+            cancelled=Count('id', filter=Q(status='CANCELLED')),
+            paid=Count('id', filter=Q(is_paid=True)),
+            unpaid=Count('id', filter=Q(is_paid=False)),
+            total_revenue=Coalesce(Sum('total_amount', filter=Q(is_paid=True)), Decimal('0.00'))
         )
         
+        completed_orders = Order.objects.filter(status='READY', ready_at__isnull=False).only('created_at', 'ready_at')
         avg_prep_time = None
         if completed_orders.exists():
-            total_prep_time = 0
-            count = 0
-            for order in completed_orders:
-                prep_time = (order.ready_at - order.created_at).total_seconds()
-                total_prep_time += prep_time
-                count += 1
-            if count > 0:
-                avg_prep_time = total_prep_time / count
+            total_prep_time = sum((o.ready_at - o.created_at).total_seconds() for o in completed_orders)
+            avg_prep_time = total_prep_time / completed_orders.count()
         
-        result = {
+        return {
             'success': True,
             'stats': {
-                'total_orders': total,
-                'preparing_orders': preparing_orders,
-                'ready_orders': ready_orders,
-                'cancelled_orders': cancelled_orders,
-                'paid_orders': paid_orders,
-                'unpaid_orders': unpaid_orders,
-                'total_revenue': str(total_revenue),
+                'total_orders': stats['total'],
+                'preparing_orders': stats['preparing'],
+                'ready_orders': stats['ready'],
+                'cancelled_orders': stats['cancelled'],
+                'paid_orders': stats['paid'],
+                'unpaid_orders': stats['unpaid'],
+                'total_revenue': str(stats['total_revenue']),
                 'average_preparation_time_seconds': avg_prep_time,
                 'average_preparation_time_formatted': OrderService._format_duration(avg_prep_time) if avg_prep_time else None
             }
         }
-        return result
     
     @staticmethod
     def _recalculate_order_total(order):
         total = order.items.aggregate(
-            total=Coalesce(
-                Sum(
-                    F('price') * F('quantity'),
-                    output_field=DecimalField(max_digits=12, decimal_places=2)
-                ),
-                Decimal('0.00')
-            )
+            total=Coalesce(Sum(F('price') * F('quantity'), output_field=DecimalField(max_digits=12, decimal_places=2)), Decimal('0.00'))
         )['total']
-
         order.total_amount = total
         order.save(update_fields=['total_amount'])
+
+
+from django.db.models import Q, Count

@@ -182,7 +182,7 @@ class AuthService:
             
             def send():
                 try:
-                    from main.services.shift_notification_service import get_shift_notification_service  # <-- CHANGED
+                    from main.services.shift_notification_service import get_shift_notification_service  
                     service = get_shift_notification_service()
                     user_name = f"{user.first_name} {user.last_name}".strip() or user.email
                     service.on_cashier_login(user.id, user_name)
