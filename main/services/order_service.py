@@ -369,7 +369,6 @@ class OrderService:
 
             if status not in OrderService.ALLOWED_STATUSES:
                 return {'success': False, 'message': f'Invalid status. Allowed: {", ".join(OrderService.ALLOWED_STATUSES)}'}
-
             if order.status == 'CANCELLED':
                 return {'success': False, 'message': 'Cannot update cancelled order'}
 
@@ -522,7 +521,7 @@ class OrderService:
             order.save(update_fields=['is_paid', 'paid_at', 'cashier_id'])
 
             InkassaService.add_to_register(order.total_amount)
-
+            _notify_order('status_change', order_id=order_id)
             return {'success': True, 'message': 'Order marked as paid', 'is_paid': True}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}

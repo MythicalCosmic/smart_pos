@@ -14,30 +14,19 @@ Environment variables:
 
 from .base import *
 
-# =============================================================================
-# DEPLOYMENT MODE
-# =============================================================================
 DEPLOYMENT_MODE = 'local'
 
 
-# =============================================================================
-# DATABASE - SQLite for local reliability
-# =============================================================================
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
-        # SQLite optimizations for POS
         'OPTIONS': {
-            'timeout': 20,  # Wait up to 20 seconds for locks
+            'timeout': 20, 
         }
     }
 }
 
-
-# =============================================================================
-# CACHE - Redis if available, fallback to local memory
-# =============================================================================
 REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
 REDIS_PORT = os.getenv('REDIS_PORT', '6379')
 
@@ -65,7 +54,6 @@ try:
         },
     }
 except:
-    # Fallback to local memory cache if Redis unavailable
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',

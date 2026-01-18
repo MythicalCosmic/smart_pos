@@ -260,6 +260,7 @@ class OrderNotificationService:
 {items_list}
 ━━━━━━━━━━━━━━━━━━━━━
 💰 <b>Jami: {total_amount} UZS</b>
+💳 To'lov: <b>{payment_status}</b>
 
 🔄 Status: <b>⏳ TAYYORLANMOQDA</b>
 """
@@ -431,6 +432,7 @@ class OrderNotificationService:
         }
         return types.get(order_type, order_type)
     
+    
     def _build_new_order_message(self, order_data: dict) -> str:
         phone_line = ""
         if order_data.get('phone_number'):
@@ -509,7 +511,7 @@ class OrderNotificationService:
         phone_line = ""
         if order_data.get('phone_number'):
             phone_line = f"📞 Tel: <b>{order_data['phone_number']}</b>"
-        
+        payment_status = "✅ To'langan" if order_data['is_paid'] else "❌ To'lanmagan"
         message = self.ORDER_PREPARING_TEMPLATE.format(
             display_id=order_data['display_id'],
             date=format_uzb_date(),
@@ -518,7 +520,8 @@ class OrderNotificationService:
             order_type=self._format_order_type(order_data['order_type']),
             phone_line=phone_line,
             items_list=self._format_items_list(order_data['items']),
-            total_amount=format_money(Decimal(order_data['total_amount']))
+            total_amount=format_money(Decimal(order_data['total_amount'])),
+            payment_status=payment_status
         ).strip()
         
         success_count = 0

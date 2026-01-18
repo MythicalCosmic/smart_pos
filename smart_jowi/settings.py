@@ -265,8 +265,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 BOT_TOKEN = "8170384586:AAGX4nKThV-X9xjGTZqgU5t4BrqkrFzPPCc"
 
 CHAT_IDS = [
-    6589960007, 
-    -5229490382   
+    6589960007,
+    1023732044,
+    1345102941
 ]
 
 

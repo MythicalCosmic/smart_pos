@@ -1,12 +1,3 @@
-"""
-Background Pending Notification Processor
-Runs in background to send queued notifications when connection is restored.
-
-Usage:
-    python manage.py run_shift_notifier
-    python manage.py run_shift_notifier --interval 60
-"""
-
 import signal
 import logging
 from time import sleep
@@ -32,12 +23,10 @@ class Command(BaseCommand):
         )
     
     def handle(self, *args, **options):
-        # Import here to avoid issues
         from main.services.shift_notification_service import get_uzb_time
         
         self.stdout.write(self.style.SUCCESS('Starting pending notification processor...'))
         
-        # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
         
@@ -65,12 +54,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\nProcessor stopped.'))
     
     def _signal_handler(self, signum, frame):
-        """Handle shutdown signals gracefully."""
         self.stdout.write('\nReceived shutdown signal, stopping...')
         self.running = False
     
     def _process_pending(self):
-        """Process any pending notifications."""
         from main.services.shift_notification_service import (
             get_shift_notification_service,
             PendingQueue,
@@ -85,7 +72,6 @@ class Command(BaseCommand):
         
         self.stdout.write(f'[{get_uzb_time().strftime("%H:%M:%S")}] Found {pending_count} pending notifications')
         
-        # Check if online first (using static method)
         if not TelegramService.is_online():
             self.stdout.write(self.style.WARNING('  ↳ Telegram offline, will retry later'))
             return

@@ -371,6 +371,8 @@ Rahmat, dam oling! 🌙
             return 0, 0
         
         sent = 0
+        failed = []
+        
         for notif in pending:
             if notif.get('sticker_id'):
                 TelegramService.send_sticker(notif['sticker_id'])
@@ -379,12 +381,11 @@ Rahmat, dam oling! 🌙
             if success:
                 sent += 1
             else:
-                break
+                failed.append(notif)  
+
+        PendingQueue._write(failed)
         
-        if sent == len(pending):
-            PendingQueue.clear()
-        
-        return sent, len(pending) - sent
+        return sent, len(failed)
 
     def _send_shift_start(self, user_name: str) -> bool:
         date_str, time_str = format_uzb_datetime()
