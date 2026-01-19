@@ -32,68 +32,6 @@
             overflow-x: hidden;
         }
 
-        /* Start Overlay */
-        .start-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: var(--bg-primary);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            cursor: pointer;
-        }
-
-        .start-overlay .logo-icon {
-            width: 120px;
-            height: 120px;
-            background: var(--card-color);
-            border-radius: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 4rem;
-            margin-bottom: 30px;
-        }
-
-        .start-overlay h1 {
-            font-size: 2.5rem;
-            font-weight: 800;
-            color: var(--text-primary);
-            margin-bottom: 8px;
-        }
-
-        .start-overlay .start-subtitle {
-            font-size: 1.1rem;
-            color: var(--text-muted);
-            margin-bottom: 40px;
-        }
-
-        .start-btn {
-            padding: 18px 50px;
-            font-size: 1.1rem;
-            font-weight: 700;
-            background: var(--card-color);
-            color: white;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
-        .start-btn:hover {
-            opacity: 0.9;
-        }
-
-        .start-overlay.hidden {
-            display: none;
-        }
-
         /* Header */
         .header {
             height: 60px;
@@ -189,8 +127,8 @@
             min-height: calc(100vh - 60px);
         }
 
-        /* Orders Grid - 5 columns */
-         .orders-grid {
+        /* Orders Grid - 6 columns */
+        .orders-grid {
             column-count: 6;
             column-gap: 12px;
             width: 100%;
@@ -236,14 +174,11 @@
             align-items: flex-end;
         }
 
-
-
-
-
         .order-time {
             font-size: 1.1rem;
             color: rgba(255, 255, 255, 0.75);
             font-weight: 600;
+            font-variant-numeric: tabular-nums;
         }
 
         /* Order Type */
@@ -257,6 +192,19 @@
             text-transform: uppercase;
             display: inline-block;
             width: fit-content;
+        }
+
+        /* Cashier Name - BIG and visible */
+        .cashier-name {
+            font-size: 1rem;
+            font-weight: 800;
+            color: white;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 16px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         /* Order Items */
@@ -322,7 +270,7 @@
         .btn-ready {
             width: 100%;
             padding: 14px;
-            background:var(--success);
+            background: var(--success);
             color: var(--text-primary);
             border: none;
             font-size: 1rem;
@@ -335,7 +283,6 @@
             justify-content: center;
             gap: 8px;
         }
-
 
         .btn-ready:disabled {
             background: rgba(255, 255, 255, 0.5);
@@ -369,25 +316,25 @@
         /* Responsive */
         @media (max-width: 1600px) {
             .orders-grid {
-                grid-template-columns: repeat(5, 1fr);
+                column-count: 5;
             }
         }
 
         @media (max-width: 1200px) {
             .orders-grid {
-                grid-template-columns: repeat(4, 1fr);
+                column-count: 4;
             }
         }
 
         @media (max-width: 900px) {
             .orders-grid {
-                grid-template-columns: repeat(3, 1fr);
+                column-count: 3;
             }
         }
 
         @media (max-width: 600px) {
             .orders-grid {
-                grid-template-columns: 1fr;
+                column-count: 1;
             }
 
             .header {
@@ -404,20 +351,13 @@
 
         @media (min-width: 2200px) {
             .orders-grid {
-                grid-template-columns: repeat(6, 1fr);
+                column-count: 7;
             }
         }
     </style>
 </head>
 
 <body>
-    <!-- <div class="start-overlay" id="startOverlay">
-        <div class="logo-icon">👨‍🍳</div>
-        <h1>Smart Food</h1>
-        <p class="start-subtitle">Oshxona paneli</p>
-        <button class="start-btn">Boshlash</button>
-    </div> -->
-
     <header class="header">
         <div class="header-left">
             <div class="logo">
@@ -447,6 +387,8 @@
 
     <script>
         const knownOrders = new Set();
+        // Store order data with timestamps for smooth timer updates
+        const orderData = new Map();
         let isFirstLoad = true;
         let audioCtx = null;
 
@@ -464,18 +406,6 @@
         const savedCardColor = localStorage.getItem('chef-card-color') || '#e74c3c';
         document.getElementById('cardColorInput').value = savedCardColor;
         setCardColor(savedCardColor);
-
-        // Auto fullscreen
-        function enterFullscreen() {
-            const elem = document.documentElement;
-            if (elem.requestFullscreen) {
-                elem.requestFullscreen();
-            } else if (elem.webkitRequestFullscreen) {
-                elem.webkitRequestFullscreen();
-            } else if (elem.msRequestFullscreen) {
-                elem.msRequestFullscreen();
-            }
-        }
 
         function playSound() {
             try {
@@ -511,6 +441,7 @@
             osc.stop(audioCtx.currentTime + 0.01);
         }
 
+        // Update header clock
         function updateTime() {
             const now = new Date();
             document.getElementById('time').textContent =
@@ -519,10 +450,11 @@
         setInterval(updateTime, 1000);
         updateTime();
 
-        function timeAgo(dateStr) {
-            const now = new Date();
-            const date = new Date(dateStr);
-            let seconds = Math.floor((now - date) / 1000);
+        // Calculate elapsed time from timestamp
+        function formatElapsedTime(timestamp) {
+            const now = Date.now();
+            const orderTime = new Date(timestamp).getTime();
+            let seconds = Math.floor((now - orderTime) / 1000);
 
             if (seconds < 0) seconds = 0;
 
@@ -537,6 +469,19 @@
             return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
         }
 
+        // Update all order timers every second - SMOOTH UPDATES
+        function updateOrderTimers() {
+            const timerElements = document.querySelectorAll('.order-time[data-timestamp]');
+            timerElements.forEach(el => {
+                const timestamp = el.getAttribute('data-timestamp');
+                if (timestamp) {
+                    el.textContent = formatElapsedTime(timestamp);
+                }
+            });
+        }
+        
+        // Run timer updates every second for smooth counting
+        setInterval(updateOrderTimers, 1000);
 
         async function markReady(orderId, btn) {
             btn.disabled = true;
@@ -559,6 +504,7 @@
                     setTimeout(() => {
                         card.remove();
                         knownOrders.delete(orderId);
+                        orderData.delete(orderId);
                         updateOrderCount();
                         checkEmpty();
                     }, 400);
@@ -609,6 +555,9 @@
             `).join('');
 
             const unpaidClass = order.is_paid ? '' : 'unpaid';
+            
+            // Get cashier name from 'user' field
+            const cashierName = order.user || '';
 
             return `
                 <div class="order-card ${unpaidClass}" data-id="${order.id}">
@@ -616,9 +565,10 @@
                         <span class="order-number">#${String(order.display_id).padStart(2, '0')}</span>
                         <div class="order-meta">
                             <span class="order-type">${orderTypeMap[order.order_type] || 'Zal'}</span>
-                            <span class="order-time">${timeAgo(order.created_at)}</span>
+                            <span class="order-time" data-timestamp="${order.created_at}">${formatElapsedTime(order.created_at)}</span>
                         </div>
                     </div>
+                    <div class="cashier-name">👤 ${cashierName}</div>
                     <div class="order-items">
                         ${items}
                     </div>
@@ -637,6 +587,8 @@
                     if (!knownOrders.has(order.id) && !isFirstLoad) {
                         hasNewOrder = true;
                     }
+                    // Store order data for timer updates
+                    orderData.set(order.id, order);
                 });
 
                 if (hasNewOrder) {
@@ -670,12 +622,11 @@
             }
         }
 
-        // document.getElementById('startOverlay').addEventListener('click', () => {
-        //     unlockAudio();
-        //     playSound();
-        //     enterFullscreen();
-        //     document.getElementById('startOverlay').classList.add('hidden');
-        // });
+        // Unlock audio on first user interaction
+        document.addEventListener('click', function unlockOnce() {
+            unlockAudio();
+            document.removeEventListener('click', unlockOnce);
+        }, { once: true });
 
         fetchOrders();
         setInterval(fetchOrders, 3000);
