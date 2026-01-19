@@ -1,5 +1,6 @@
-from django.urls import path
+from django.urls import path, include
 from main.views import auth_views, category_views, product_views, user_views, order_views, inkassa_views
+from main.views.sync_views import *
 
 
 app_name = 'main'
@@ -60,5 +61,12 @@ urlpatterns = [
     
     path('display/client', order_views.client_display, name='client_display'),
     path('display/chef', order_views.chef_display, name='chef_display'),
+
+
+    path('health', SyncHealthView.as_view(), name='sync-health'),
+    path('receive', SyncReceiveView.as_view(), name='sync-receive'),
+    path('status', SyncStatusView.as_view(), name='sync-status'),
+    path('trigger', SyncTriggerView.as_view(), name='sync-trigger'),
+    path('queue', SyncQueueView.as_view(), name='sync-queue'),
 ]
 

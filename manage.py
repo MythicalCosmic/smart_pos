@@ -2,11 +2,13 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
+from dotenv import load_dotenv  
+load_dotenv(override=True)  
 
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'smart_jowi.settings')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'smart_jowi.settings.local')
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

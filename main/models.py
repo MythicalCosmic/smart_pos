@@ -1,6 +1,175 @@
-from django.db import models
+"""
+Smart Jowi Models with Sync Support
+"""
 
-class User(models.Model):
+import uuid
+from django.db import models
+from django.conf import settings
+
+
+# =============================================================================
+# SYNC MIXIN - Add to all models that need syncing
+# =============================================================================
+
+class SyncMixin(models.Model):
+    """
+    Mixin that adds sync tracking to any model.
+    """
+    
+    uuid = models.UUIDField(
+        default=uuid.uuid4, 
+        unique=True, 
+        editable=False,
+        db_index=True,
+    )
+    
+    synced_at = models.DateTimeField(
+        null=True, 
+        blank=True,
+        db_index=True,
+    )
+    
+    sync_version = models.PositiveIntegerField(default=1)
+    
+    is_deleted = models.BooleanField(default=False, db_index=True)
+    
+    branch_id = models.CharField(max_length=50, blank=True, default='', db_index=True)
+    
+    class Meta:
+        abstract = True
+    
+    def save(self, *args, **kwargs):
+        # Set branch_id on creation
+        if not self.branch_id and hasattr(settings, 'BRANCH_ID'):
+            self.branch_id = settings.BRANCH_ID
+        
+        # Increment version on updates
+        if self.pk:
+            self.sync_version += 1
+        
+        # Clear synced_at to mark as needing sync (only in local mode)
+        if getattr(settings, 'DEPLOYMENT_MODE', 'local') == 'local':
+            update_fields = kwargs.get('update_fields')
+            if update_fields is None or any(f not in ['synced_at', 'sync_version'] for f in update_fields):
+                self.synced_at = None
+        
+        super().save(*args, **kwargs)
+        
+        # Queue for sync if enabled
+        if getattr(settings, 'SYNC_ON_SAVE', False) and self.synced_at is None:
+            self._queue_for_sync()
+    
+    def delete(self, *args, **kwargs):
+        """Soft delete by default."""
+        hard_delete = kwargs.pop('hard_delete', False)
+        if hard_delete:
+            super().delete(*args, **kwargs)
+        else:
+            self.is_deleted = True
+            self.save(update_fields=['is_deleted', 'synced_at', 'sync_version'])
+    
+    def hard_delete(self):
+        super().delete()
+    
+    def _queue_for_sync(self):
+        try:
+            from main.services.sync_service import SyncService
+            SyncService.queue_record(self)
+        except Exception:
+            pass
+    
+    def to_sync_dict(self) -> dict:
+        """Convert to dictionary for sync."""
+        data = {
+            'uuid': str(self.uuid),
+            'sync_version': self.sync_version,
+            'is_deleted': self.is_deleted,
+            'branch_id': self.branch_id,
+        }
+        
+        # Add all concrete fields
+        for field in self._meta.get_fields():
+            if field.concrete and not field.is_relation:
+                if field.name not in ['id', 'uuid', 'synced_at', 'sync_version', 'is_deleted', 'branch_id']:
+                    value = getattr(self, field.name, None)
+                    if hasattr(value, 'isoformat'):
+                        value = value.isoformat()
+                    data[field.name] = value
+        
+        return data
+    
+    @classmethod
+    def from_sync_dict(cls, data: dict, branch_id: str = None):
+        """Create or update from sync data."""
+        from django.utils import timezone
+        
+        uuid_val = data.pop('uuid')
+        sync_version = data.pop('sync_version', 1)
+        is_deleted = data.pop('is_deleted', False)
+        incoming_branch = data.pop('branch_id', branch_id)
+        
+        try:
+            instance = cls.objects.get(uuid=uuid_val)
+            
+            if sync_version >= instance.sync_version:
+                for key, value in data.items():
+                    if hasattr(instance, key):
+                        setattr(instance, key, value)
+                instance.sync_version = sync_version
+                instance.is_deleted = is_deleted
+                instance.synced_at = timezone.now()
+                instance.save()
+            
+            return instance, 'updated'
+            
+        except cls.DoesNotExist:
+            instance = cls(
+                uuid=uuid_val,
+                sync_version=sync_version,
+                is_deleted=is_deleted,
+                branch_id=incoming_branch,
+            )
+            for key, value in data.items():
+                if hasattr(instance, key):
+                    setattr(instance, key, value)
+            instance.save()
+            return instance, 'created'
+
+
+class SyncQuerySet(models.QuerySet):
+    """Custom QuerySet with sync-aware methods."""
+    
+    def unsynced(self):
+        return self.filter(
+            models.Q(synced_at__isnull=True) |
+            models.Q(synced_at__lt=models.F('updated_at'))
+        )
+    
+    def from_branch(self, branch_id):
+        return self.filter(branch_id=branch_id)
+    
+    def active(self):
+        return self.filter(is_deleted=False)
+
+
+class SyncManager(models.Manager):
+    """Manager that uses SyncQuerySet."""
+    
+    def get_queryset(self):
+        return SyncQuerySet(self.model, using=self._db)
+    
+    def unsynced(self):
+        return self.get_queryset().unsynced()
+    
+    def active(self):
+        return self.get_queryset().active()
+
+
+# =============================================================================
+# MODELS
+# =============================================================================
+
+class User(SyncMixin, models.Model):
     class RoleChoices(models.TextChoices):
         USER = "USER", "User"
         ADMIN = "ADMIN", "Admin"
@@ -30,17 +199,20 @@ class User(models.Model):
     last_login_at = models.DateTimeField(null=True, blank=True)
     last_login_api = models.CharField(max_length=20, null=True, blank=True)
 
+    objects = SyncManager()
 
-    def save_model(self, request, obj, form, change):
-        if form.cleaned_data.get('password'):
-            obj.set_password(form.cleaned_data['password']) 
-        super().save_model(request, obj, form, change)
+    def to_sync_dict(self) -> dict:
+        data = super().to_sync_dict()
+        # Don't sync password for security
+        data.pop('password', None)
+        return data
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 
 
 class Session(models.Model):
+    """Sessions don't need sync - they're local only."""
     user_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     ip_address = models.CharField(max_length=20)
     user_agent = models.CharField(max_length=30, null=True, blank=True, default='Chrome')
@@ -48,7 +220,7 @@ class Session(models.Model):
     last_activity = models.DateTimeField(auto_now_add=True)
 
 
-class Category(models.Model):
+class Category(SyncMixin, models.Model):
     name = models.CharField(max_length=50)
     sort_order = models.IntegerField(default=0)
     colors = models.JSONField(default=list, blank=True, help_text="Colors: ['#e74c3c', '#3498db']")
@@ -62,11 +234,13 @@ class Category(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = SyncManager()
+
     def __str__(self):
         return self.name
 
 
-class Product(models.Model):
+class Product(SyncMixin, models.Model):
     category = models.ForeignKey(
         Category,
         on_delete=models.CASCADE,
@@ -79,11 +253,31 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    objects = SyncManager()
+
+    def to_sync_dict(self) -> dict:
+        data = super().to_sync_dict()
+        data['category_uuid'] = str(self.category.uuid) if self.category else None
+        return data
+    
     def __str__(self):
         return self.name
 
 
-class Order(models.Model):
+class DeliveryPerson(SyncMixin, models.Model):
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50, null=True, blank=True)
+    phone_number = models.CharField(max_length=50)
+    is_active = models.BooleanField(default=True) 
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = SyncManager()
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
+
+
+class Order(SyncMixin, models.Model):
     class Status(models.TextChoices):
         OPEN = "OPEN", "Open"                     
         PREPARING = "PREPARING", "Preparing"       
@@ -97,7 +291,7 @@ class Order(models.Model):
         PICKUP = "PICKUP", "Pickup"
 
     delivery_person = models.ForeignKey(
-        'DeliveryPerson',
+        DeliveryPerson,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -140,11 +334,20 @@ class Order(models.Model):
     ready_at = models.DateTimeField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
 
+    objects = SyncManager()
+
+    def to_sync_dict(self) -> dict:
+        data = super().to_sync_dict()
+        data['user_uuid'] = str(self.user.uuid) if self.user else None
+        data['cashier_uuid'] = str(self.cashier.uuid) if self.cashier else None
+        data['delivery_person_uuid'] = str(self.delivery_person.uuid) if self.delivery_person else None
+        return data
+
     def __str__(self):
         return f"Order #{self.display_id} - {self.order_type} - {self.status}"
 
 
-class OrderItem(models.Model):
+class OrderItem(SyncMixin, models.Model):
     order = models.ForeignKey(
         Order,
         related_name="items",
@@ -162,17 +365,27 @@ class OrderItem(models.Model):
         decimal_places=2
     )
 
+    objects = SyncManager()
+
+    def to_sync_dict(self) -> dict:
+        data = super().to_sync_dict()
+        data['order_uuid'] = str(self.order.uuid) if self.order else None
+        data['product_uuid'] = str(self.product.uuid) if self.product else None
+        return data
+
     def __str__(self):
         return f"{self.product.name} x {self.quantity}"
 
 
-class CashRegister(models.Model):
+class CashRegister(SyncMixin, models.Model):
     current_balance = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         default=0
     )
     last_updated = models.DateTimeField(auto_now=True)
+    
+    objects = SyncManager()
     
     class Meta:
         db_table = 'cash_register'
@@ -181,7 +394,7 @@ class CashRegister(models.Model):
         return f"Cash Register: {self.current_balance}"
 
 
-class Inkassa(models.Model):
+class Inkassa(SyncMixin, models.Model):
     cashier = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -192,8 +405,8 @@ class Inkassa(models.Model):
     class InkassType(models.TextChoices):
         CASH = "CASH", "Cash"
         UZCARD = "UZCARD", "Uzcard"
-        HUMO = "HUMO" "Humo"
-        PAYME = "PAYME" "Payme"
+        HUMO = "HUMO", "Humo"
+        PAYME = "PAYME", "Payme"
 
     amount = models.DecimalField(max_digits=12, decimal_places=2)
 
@@ -215,16 +428,12 @@ class Inkassa(models.Model):
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
+    objects = SyncManager()
+
+    def to_sync_dict(self) -> dict:
+        data = super().to_sync_dict()
+        data['cashier_uuid'] = str(self.cashier.uuid) if self.cashier else None
+        return data
+    
     def __str__(self):
         return f"Inkassa #{self.id} - {self.amount} on {self.created_at.strftime('%Y-%m-%d %H:%M')}"
-    
-
-class DeliveryPerson(models.Model):
-    first_name = models.CharField(max_length=50)
-    last_name = models.CharField(max_length=50, null=True, blank=True)
-    phone_number = models.CharField(max_length=50)
-    is_active = models.BooleanField(default=True) 
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.first_name} {self.last_name}"
