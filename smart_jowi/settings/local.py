@@ -154,3 +154,50 @@ LOGGING = {
 
 # Create logs directory if it doesn't exist
 (BASE_DIR / 'logs').mkdir(exist_ok=True)
+
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+from pathlib import Path
+from datetime import timedelta
+from datetime import timezone
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+TIME_ZONE = 'Asia/Tashkent'
+USE_TZ = True
+
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+
+BOT_TOKEN = "8170384586:AAGX4nKThV-X9xjGTZqgU5t4BrqkrFzPPCc"
+
+CHAT_IDS = [
+    6589960007,
+    1023732044,
+    1345102941
+]
+
+
+STICKERS = {
+    'shift_start': 'CAACAgIAAxkBAAEQOqZpZWS4euSKl2PLZpdLttwFKa1F2AACJWIAAj12uUvJkCLvzsfVXDgE',  
+    'shift_end': 'CAACAgIAAxkBAAEQOqxpZWT2il8UsiHpQi07tIWe93jR0wAChmAAAqdiuUu0SVLALPDTHzgE',    
+    'shift_switch': 'CAACAgIAAxkBAAEQOqppZWTpPjzqPEsc4fAxS3tI4wqrngACQWcAAqBFuUty6UbBXMMhVTgE',  
+    'good_stats': 'CAACAgIAAxkBAAEQOqZpZWS4euSKl2PLZpdLttwFKa1F2AACJWIAAj12uUvJkCLvzsfVXDgE',   
+    'neutral_stats': 'CAACAgIAAxkBAAEQOqhpZWTSsEDpaDtR7BGRoIrka3HGkQACtGUAAisBuUtbDAYh4513yTgE', 
+}
+
+UZB_OFFSET = timedelta(hours=5)
+UZB_TZ = timezone(UZB_OFFSET)
+
+SESSION_FILE = "active_session.json"
+PENDING_FILE = "pending_notifications.json"
+
+ORDER_MESSAGES_FILE = "order_messages.json"  
+PENDING_ORDERS_FILE = "pending_order_notifications.json"
+
+RETRY_INTERVAL_SECONDS = 180  

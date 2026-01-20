@@ -51,12 +51,11 @@ class Command(BaseCommand):
         self.stdout.write('  --pending        Process pending notifications')
 
     def check_connection(self):
-        """Check Telegram API connectivity."""
-        from main.services.shift_notification_service import TelegramService, get_uzb_time, BOT_TOKEN, CHAT_ID
+        from main.services.shift_notification_service import TelegramService, get_uzb_time, BOT_TOKEN, CHAT_IDS
         
         self.stdout.write('Checking Telegram connection...\n')
         self.stdout.write(f'Bot Token: {BOT_TOKEN[:20]}...')
-        self.stdout.write(f'Chat ID: {CHAT_ID}')
+        self.stdout.write(f'Chat ID: {CHAT_IDS}')
         self.stdout.write(f'Current time (UZB): {get_uzb_time().strftime("%Y-%m-%d %H:%M:%S")}')
         
         if TelegramService.is_online():

@@ -53,6 +53,19 @@ class OrderService:
         return (last.display_id % 100) + 1
     
     @staticmethod
+    def _check_cashier_ownership(order, cashier_id):
+        """
+        Check if the cashier is allowed to modify this order.
+        Returns error dict if not allowed, None if allowed.
+        """
+        if order.cashier_id and order.cashier_id != cashier_id:
+            return {
+                'success': False,
+                'message': f'Sizda bu buyurtmani o\'zgartirish huquqi yo\'q. Buyurtma #{order.display_id} boshqa kassir tomonidan yaratilgan.'
+            }
+        return None
+    
+    @staticmethod
     def get_all_orders(page=1, per_page=20, statuses=None, payment_status=None, 
                        category_ids=None, user_id=None, cashier_id=None, order_by='-created_at'):
         
@@ -287,9 +300,14 @@ class OrderService:
     
     @staticmethod
     @transaction.atomic
-    def add_item_to_order(order_id, product_id, quantity):
+    def add_item_to_order(order_id, product_id, quantity, cashier_id=None):
         try:
             order = Order.objects.get(id=order_id)
+            
+            # Check cashier ownership
+            ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
+            if ownership_error:
+                return ownership_error
             
             if order.status != 'PREPARING':
                 return {'success': False, 'message': 'Cannot modify order that is not in PREPARING status'}
@@ -319,9 +337,14 @@ class OrderService:
     
     @staticmethod
     @transaction.atomic
-    def update_order_item(order_id, item_id, quantity):
+    def update_order_item(order_id, item_id, quantity, cashier_id=None):
         try:
             order = Order.objects.get(id=order_id)
+            
+            # Check cashier ownership
+            ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
+            if ownership_error:
+                return ownership_error
             
             if order.status != 'PREPARING':
                 return {'success': False, 'message': 'Cannot modify order that is not in PREPARING status'}
@@ -339,9 +362,14 @@ class OrderService:
     
     @staticmethod
     @transaction.atomic
-    def remove_item_from_order(order_id, item_id):
+    def remove_item_from_order(order_id, item_id, cashier_id=None):
         try:
             order = Order.objects.get(id=order_id)
+            
+            # Check cashier ownership
+            ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
+            if ownership_error:
+                return ownership_error
             
             if order.status != 'PREPARING':
                 return {'success': False, 'message': 'Cannot modify order that is not in PREPARING status'}
@@ -366,6 +394,11 @@ class OrderService:
     def update_order_status(order_id, status, cashier_id=None):
         try:
             order = Order.objects.get(id=order_id)
+            
+            # Check cashier ownership
+            ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
+            if ownership_error:
+                return ownership_error
 
             if status not in OrderService.ALLOWED_STATUSES:
                 return {'success': False, 'message': f'Invalid status. Allowed: {", ".join(OrderService.ALLOWED_STATUSES)}'}
@@ -380,10 +413,6 @@ class OrderService:
                 order.ready_at = now
                 order.items.filter(ready_at__isnull=True).update(ready_at=now)
                 update_fields.append('ready_at')
-
-            if cashier_id is not None:
-                order.cashier_id = cashier_id
-                update_fields.append('cashier_id')
 
             order.save(update_fields=update_fields)
 
@@ -400,9 +429,14 @@ class OrderService:
 
     @staticmethod
     @transaction.atomic
-    def mark_item_ready(order_id, item_id):
+    def mark_item_ready(order_id, item_id, cashier_id=None):
         try:
             order = Order.objects.select_related('cashier').prefetch_related('items__product').get(id=order_id)
+            
+            # Check cashier ownership
+            ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
+            if ownership_error:
+                return ownership_error
             
             if order.status == 'CANCELLED':
                 return {'success': False, 'message': 'Cannot modify cancelled order'}
@@ -467,9 +501,14 @@ class OrderService:
     
     @staticmethod
     @transaction.atomic
-    def unmark_item_ready(order_id, item_id):
+    def unmark_item_ready(order_id, item_id, cashier_id=None):
         try:
             order = Order.objects.get(id=order_id)
+            
+            # Check cashier ownership
+            ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
+            if ownership_error:
+                return ownership_error
             
             if order.status == 'CANCELLED':
                 return {'success': False, 'message': 'Cannot modify cancelled order'}
@@ -505,9 +544,14 @@ class OrderService:
 
     @staticmethod
     @transaction.atomic
-    def mark_as_paid(order_id, admin_id):
+    def mark_as_paid(order_id, cashier_id):
         try:
             order = Order.objects.get(id=order_id)
+            
+            # Check cashier ownership
+            ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
+            if ownership_error:
+                return ownership_error
 
             if order.status == 'CANCELLED':
                 return {'success': False, 'message': 'Cancelled order cannot be paid'}
@@ -517,8 +561,7 @@ class OrderService:
 
             order.is_paid = True
             order.paid_at = timezone.now()
-            order.cashier_id = admin_id
-            order.save(update_fields=['is_paid', 'paid_at', 'cashier_id'])
+            order.save(update_fields=['is_paid', 'paid_at'])
 
             InkassaService.add_to_register(order.total_amount)
             _notify_order('status_change', order_id=order_id)
@@ -527,9 +570,14 @@ class OrderService:
             return {'success': False, 'message': 'Order not found'}
 
     @staticmethod
-    def mark_order_ready(order_id):
+    def mark_order_ready(order_id, cashier_id=None):
         try:
             order = Order.objects.get(id=order_id)
+            
+            # Check cashier ownership
+            ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
+            if ownership_error:
+                return ownership_error
             
             if order.status == 'CANCELLED':
                 return {'success': False, 'message': 'Cannot mark cancelled order as ready'}

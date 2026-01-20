@@ -102,7 +102,6 @@ class TelegramAPI:
     
     @classmethod
     def unpin_message(cls, chat_id: int, message_id: int) -> bool:
-        """Unpin message. Returns success."""
         result = cls._request("unpinChatMessage", {
             "chat_id": chat_id,
             "message_id": message_id
@@ -111,7 +110,6 @@ class TelegramAPI:
     
     @classmethod
     def delete_message(cls, chat_id: int, message_id: int) -> bool:
-        """Delete message. Returns success."""
         result = cls._request("deleteMessage", {
             "chat_id": chat_id,
             "message_id": message_id
@@ -232,80 +230,87 @@ class PendingOrderQueue:
         return cls.count() == 0
 
 
-
 class OrderNotificationService:
-    NEW_ORDER_TEMPLATE = """
-📦 <b>YANGI BUYURTMA #{display_id}</b>
+    
+    STATUS_FORMATS = {
+        'NEW': '🆕 YANGI',
+        'OPEN': '🆕 YANGI',
+        'PREPARING': '🔄 TAYYORLANMOQDA',
+        'READY': '✅ TAYYOR',
+        'DELIVERING': '🚗 YETKAZILMOQDA',
+        'COMPLETED': '✔️ YAKUNLANDI',
+        'CANCELLED': '🚫 BEKOR QILINDI'
+    }
+    
+    ORDER_TEMPLATE = """
+<b>{status_text} #{display_id}</b>
 
-📅 {date} | ⏰ {time}
-👤 Kassir: <b>{cashier_name}</b>
-📍 Turi: <b>{order_type}</b>
+Kassir: <b>{cashier_name}</b>
+Turi: <b>{order_type}</b>
 {phone_line}
-━━━━━━━━━━━━━━━━━━━━━
+───────────────────
 {items_list}
-━━━━━━━━━━━━━━━━━━━━━
-💰 <b>Jami: {total_amount} UZS</b>
-
-🔄 Status: <b>⏳ TAYYORLANMOQDA</b>
-"""
-
-    ORDER_PREPARING_TEMPLATE = """
-📦 <b>BUYURTMA #{display_id}</b>
-
-📅 {date} | ⏰ {time}
-👤 Kassir: <b>{cashier_name}</b>
-📍 Turi: <b>{order_type}</b>
-{phone_line}
-━━━━━━━━━━━━━━━━━━━━━
-{items_list}
-━━━━━━━━━━━━━━━━━━━━━
-💰 <b>Jami: {total_amount} UZS</b>
-💳 To'lov: <b>{payment_status}</b>
-
-🔄 Status: <b>⏳ TAYYORLANMOQDA</b>
-"""
-
-    ORDER_READY_TEMPLATE = """
-✅✅✅✅✅✅✅✅✅✅✅✅
-
-🎉 <b>BUYURTMA TAYYOR!</b>
-
-📦 <b>#{display_id}</b>
-👤 Kassir: <b>{cashier_name}</b>
-📍 Turi: <b>{order_type}</b>
-{phone_line}
-━━━━━━━━━━━━━━━━━━━━━
-{items_list}
-━━━━━━━━━━━━━━━━━━━━━
-💰 <b>Jami: {total_amount} UZS</b>
-💳 To'lov: <b>{payment_status}</b>
-⏱ Tayyorlash vaqti: <b>{prep_time}</b>
-
-✅ Status: <b>TAYYOR</b>
-
-✅✅✅✅✅✅✅✅✅✅✅✅
+───────────────────
+<b>Jami: {total_amount} so'm</b>
+To'lov: {payment_status}
+{prep_time_line}
+{hashtags}
 """
 
     ORDER_CANCELLED_TEMPLATE = """
-❌❌❌❌❌❌❌❌❌❌❌❌
+<b>🚫 BEKOR QILINDI #{display_id}</b>
 
-🚫 <b>BUYURTMA BEKOR QILINDI</b>
-
-📦 <b>#{display_id}</b>
-👤 Kassir: <b>{cashier_name}</b>
-━━━━━━━━━━━━━━━━━━━━━
+Kassir: <b>{cashier_name}</b>
+───────────────────
 {items_list}
-━━━━━━━━━━━━━━━━━━━━━
-💰 <s>{total_amount} UZS</s>
+───────────────────
+<s>{total_amount} so'm</s>
 
-❌ Status: <b>BEKOR QILINDI</b>
-
-❌❌❌❌❌❌❌❌❌❌❌❌
+{hashtags}
 """
+
+    ORDER_TYPE_HASHTAGS = {
+        'HALL': '#zal',
+        'DELIVERY': '#yetkazish',
+        'PICKUP': '#olib_ketish'
+    }
+    
+    STATUS_HASHTAGS = {
+        'NEW': '#yangi',
+        'OPEN': '#yangi',
+        'PREPARING': '#tayyorlanmoqda',
+        'READY': '#tayyor',
+        'DELIVERING': '#yetkazilmoqda',
+        'COMPLETED': '#yakunlandi',
+        'CANCELLED': '#bekor'
+    }
 
     def __init__(self):
         self._retry_thread = None
         self._stop_retry = False
+    
+    def _get_status_text(self, status: str) -> str:
+        return self.STATUS_FORMATS.get(status, status)
+    
+    def _get_payment_status(self, is_paid: bool) -> str:
+        return "✅ To'langan" if is_paid else "❌ To'lanmagan"
+    
+    def _get_hashtags(self, order_data: dict, status: str) -> str:
+        tags = []
+        
+        if status in self.STATUS_HASHTAGS:
+            tags.append(self.STATUS_HASHTAGS[status])
+        
+        order_type = order_data.get('order_type', '')
+        if order_type in self.ORDER_TYPE_HASHTAGS:
+            tags.append(self.ORDER_TYPE_HASHTAGS[order_type])
+        
+        if order_data.get('is_paid'):
+            tags.append('#tolangan')
+        else:
+            tags.append('#tolanmagan')
+        
+        return ' '.join(tags)
     
     def on_new_order(self, order) -> dict:
         order_data = self._serialize_order(order)
@@ -399,10 +404,7 @@ class OrderNotificationService:
             seconds = (order.ready_at - order.created_at).total_seconds()
             minutes = int(seconds // 60)
             secs = int(seconds % 60)
-            if minutes > 0:
-                prep_time = f"{minutes} daqiqa {secs} soniya"
-            else:
-                prep_time = f"{secs} soniya"
+            prep_time = f"{minutes}:{secs:02d}"
         
         return {
             'id': order.id,
@@ -420,63 +422,55 @@ class OrderNotificationService:
     
     def _format_items_list(self, items: list) -> str:
         lines = []
-        for i, item in enumerate(items, 1):
-            lines.append(f"{i}. {item['product_name']} x{item['quantity']} — {format_money(Decimal(item['subtotal']))} UZS")
+        for item in items:
+            lines.append(f"{item['product_name']} x{item['quantity']} — {format_money(Decimal(item['subtotal']))} so'm")
         return "\n".join(lines)
     
     def _format_order_type(self, order_type: str) -> str:
         types = {
-            'HALL': '🍽 Zalda',
-            'DELIVERY': '🚗 Yetkazib berish',
-            'PICKUP': '🏃 Olib ketish'
+            'HALL': 'Zalda',
+            'DELIVERY': 'Yetkazib berish',
+            'PICKUP': 'Olib ketish'
         }
         return types.get(order_type, order_type)
     
-    
-    def _build_new_order_message(self, order_data: dict) -> str:
+    def _build_order_message(self, order_data: dict, status: str) -> str:
         phone_line = ""
         if order_data.get('phone_number'):
-            phone_line = f"📞 Tel: <b>{order_data['phone_number']}</b>"
+            phone_line = f"Tel: <b>{order_data['phone_number']}</b>"
         
-        return self.NEW_ORDER_TEMPLATE.format(
-            display_id=order_data['display_id'],
-            date=format_uzb_date(),
-            time=format_uzb_time(),
-            cashier_name=order_data['cashier_name'],
-            order_type=self._format_order_type(order_data['order_type']),
-            phone_line=phone_line,
-            items_list=self._format_items_list(order_data['items']),
-            total_amount=format_money(Decimal(order_data['total_amount']))
-        ).strip()
-    
-    def _build_ready_message(self, order_data: dict) -> str:
-        phone_line = ""
-        if order_data.get('phone_number'):
-            phone_line = f"📞 Tel: <b>{order_data['phone_number']}</b>"
+        prep_time_line = ""
+        if order_data.get('prep_time'):
+            prep_time_line = f"Vaqt: <b>{order_data['prep_time']}</b>"
         
-        payment_status = "✅ To'langan" if order_data['is_paid'] else "❌ To'lanmagan"
+        hashtags = self._get_hashtags(order_data, status)
         
-        return self.ORDER_READY_TEMPLATE.format(
+        return self.ORDER_TEMPLATE.format(
+            status_text=self._get_status_text(status),
             display_id=order_data['display_id'],
             cashier_name=order_data['cashier_name'],
             order_type=self._format_order_type(order_data['order_type']),
             phone_line=phone_line,
             items_list=self._format_items_list(order_data['items']),
             total_amount=format_money(Decimal(order_data['total_amount'])),
-            payment_status=payment_status,
-            prep_time=order_data.get('prep_time', '—')
+            payment_status=self._get_payment_status(order_data['is_paid']),
+            prep_time_line=prep_time_line,
+            hashtags=hashtags
         ).strip()
     
     def _build_cancelled_message(self, order_data: dict) -> str:
+        hashtags = self._get_hashtags(order_data, 'CANCELLED')
+        
         return self.ORDER_CANCELLED_TEMPLATE.format(
             display_id=order_data['display_id'],
             cashier_name=order_data['cashier_name'],
             items_list=self._format_items_list(order_data['items']),
-            total_amount=format_money(Decimal(order_data['total_amount']))
+            total_amount=format_money(Decimal(order_data['total_amount'])),
+            hashtags=hashtags
         ).strip()
     
     def _send_new_order(self, order_data: dict) -> dict:
-        message = self._build_new_order_message(order_data)
+        message = self._build_order_message(order_data, 'NEW')
         sticker_id = STICKERS.get('new_order')
         
         chat_message_map = {}
@@ -508,21 +502,8 @@ class OrderNotificationService:
         if not message_ids:
             return self._send_new_order(order_data)
         
-        phone_line = ""
-        if order_data.get('phone_number'):
-            phone_line = f"📞 Tel: <b>{order_data['phone_number']}</b>"
-        payment_status = "✅ To'langan" if order_data['is_paid'] else "❌ To'lanmagan"
-        message = self.ORDER_PREPARING_TEMPLATE.format(
-            display_id=order_data['display_id'],
-            date=format_uzb_date(),
-            time=format_uzb_time(),
-            cashier_name=order_data['cashier_name'],
-            order_type=self._format_order_type(order_data['order_type']),
-            phone_line=phone_line,
-            items_list=self._format_items_list(order_data['items']),
-            total_amount=format_money(Decimal(order_data['total_amount'])),
-            payment_status=payment_status
-        ).strip()
+        status = order_data.get('status', 'PREPARING')
+        message = self._build_order_message(order_data, status)
         
         success_count = 0
         for chat_id, message_id in message_ids.items():
@@ -540,10 +521,9 @@ class OrderNotificationService:
         if message_ids:
             for chat_id, message_id in message_ids.items():
                 TelegramAPI.unpin_message(chat_id, message_id)
-    
-                TelegramAPI.edit_message(chat_id, message_id, f"✅ Buyurtma #{order_data['display_id']} tayyor!")
+                TelegramAPI.edit_message(chat_id, message_id, f"✅ #{order_data['display_id']} tayyor!")
 
-        message = self._build_ready_message(order_data)
+        message = self._build_order_message(order_data, 'READY')
         sticker_id = STICKERS.get('order_ready')
         
         success_count = 0
@@ -581,7 +561,7 @@ class OrderNotificationService:
         
         if message_ids:
             for chat_id, message_id in message_ids.items():
-                TelegramAPI.edit_message(chat_id, message_id, f"❌ Buyurtma #{order_data['display_id']} bekor qilindi")
+                TelegramAPI.edit_message(chat_id, message_id, f"🚫 #{order_data['display_id']} bekor qilindi")
 
         OrderMessageStorage.remove_order(order_data['id'])
         
@@ -627,6 +607,7 @@ class OrderNotificationService:
     
     def stop_retry_thread(self):
         self._stop_retry = True
+
 
 _service_instance: Optional[OrderNotificationService] = None
 

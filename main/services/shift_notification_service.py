@@ -8,7 +8,9 @@ from typing import Optional, Tuple, List
 from dataclasses import dataclass
 from smart_jowi.settings import BOT_TOKEN, CHAT_IDS, STICKERS, UZB_TZ, SESSION_FILE, PENDING_FILE 
 
-from django.db.models import Sum
+from django.db.models import Sum, Count, Avg, Q, F, ExpressionWrapper, DurationField
+from django.db.models.functions import ExtractHour
+from django.db import models
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,22 @@ def format_uzb_datetime(dt: datetime = None) -> tuple[str, str]:
     else:
         dt = dt.astimezone(UZB_TZ)
     return dt.strftime('%Y-%m-%d'), dt.strftime('%H:%M:%S')
+
+
+def format_money(amount) -> str:
+    if isinstance(amount, Decimal):
+        amount = float(amount)
+    return f"{amount:,.0f}"
+
+
+def format_duration(minutes: int) -> str:
+    if minutes < 60:
+        return f"{minutes} daqiqa"
+    hours = minutes // 60
+    mins = minutes % 60
+    if mins == 0:
+        return f"{hours} soat"
+    return f"{hours} soat {mins} daqiqa"
 
 
 class TelegramService:
@@ -146,6 +164,7 @@ class SessionTracker:
             logger.info(f"Session cleared: {old['user_name']}")
         return old
 
+
 class PendingQueue:
     
     @staticmethod
@@ -188,6 +207,7 @@ class PendingQueue:
     def count(cls) -> int:
         return len(cls._read())
 
+
 @dataclass
 class ShiftStats:
     total_orders: int
@@ -195,56 +215,72 @@ class ShiftStats:
     paid_orders: int
     unpaid_orders: int
     cancelled_orders: int
+    completed_orders: int
     duration_minutes: int
+    avg_order_value: Decimal
+    avg_prep_time_seconds: float
+    order_types: dict
+    top_products: list
+    peak_hour: dict
+
 
 class ShiftNotificationService:
 
     SHIFT_START_TEMPLATE = """
-🟢 <b>SMENA BOSHLANDI</b>
+<b>SMENA BOSHLANDI</b>
 
-👤 Kassir: <b>{cashier_name}</b>
-📅 Sana: {date}
-⏰ Vaqt: {time}
-
-Yaxshi ish kunini tilaymiz! 💪
-"""
-
-    SHIFT_END_TEMPLATE = """
-🔴 <b>SMENA TUGADI</b>
-
-👤 Kassir: <b>{cashier_name}</b>
-📅 Sana: {date}
-⏰ Vaqt: {time}
-⏱ Davomiyligi: <b>{duration}</b>
-
-Rahmat, dam oling! 🌙
+Kassir: <b>{cashier_name}</b>
+Sana: {date}
+Vaqt: {time}
 """
 
     STATISTICS_TEMPLATE = """
-📊 <b>{cashier_name} - SMENA STATISTIKASI</b>
+<b>{cashier_name} — SMENA HISOBOTI</b>
 
-⏱ Davomiyligi: <b>{duration}</b>
-━━━━━━━━━━━━━━━━━━━━━
-📦 Jami buyurtmalar: <b>{total_orders}</b>
-✅ To'langan: <b>{paid_orders}</b>
-❌ To'lanmagan: <b>{unpaid_orders}</b>
-🚫 Bekor qilingan: <b>{cancelled_orders}</b>
-━━━━━━━━━━━━━━━━━━━━━
-💰 <b>Jami tushum: {total_revenue:,.0f} UZS</b>
+{date_from} {time_from} — {date_to} {time_to}
+Davomiyligi: <b>{duration}</b>
+───────────────────
+<b>BUYURTMALAR</b>
+
+Jami: <b>{total_orders}</b>
+Bajarilgan: <b>{completed_orders}</b>
+Bekor qilingan: <b>{cancelled_orders}</b>
+O'rtacha tayyorlash: <b>{avg_prep_time}</b>
+Eng band soat: <b>{peak_hour}</b> ({peak_count} ta)
+───────────────────
+<b>TO'LOVLAR</b>
+
+To'langan: <b>{paid_orders}</b>
+To'lanmagan: <b>{unpaid_orders}</b>
+───────────────────
+<b>BUYURTMA TURLARI</b>
+
+Zalda: <b>{hall_orders}</b> ({hall_revenue} so'm)
+Yetkazib berish: <b>{delivery_orders}</b> ({delivery_revenue} so'm)
+Olib ketish: <b>{pickup_orders}</b> ({pickup_revenue} so'm)
+───────────────────
+<b>TOP MAHSULOTLAR</b>
+
+{top_products_list}
+───────────────────
+<b>MOLIYAVIY NATIJA</b>
+
+Jami tushum: <b>{total_revenue} so'm</b>
+O'rtacha chek: <b>{avg_order_value} so'm</b>
 """
 
     SHIFT_SWITCH_TEMPLATE = """
-🔄 <b>SMENA ALMASHDI</b>
+<b>SMENA ALMASHDI</b>
 
-🔴 Chiqdi: <b>{old_cashier}</b>
-🟢 Kirdi: <b>{new_cashier}</b>
+Chiqdi: <b>{old_cashier}</b>
+Kirdi: <b>{new_cashier}</b>
 
-📅 Sana: {date}
-⏰ Vaqt: {time}
+Sana: {date}
+Vaqt: {time}
 """
 
-    def get_shift_statistics(self, start_time: datetime, end_time: datetime = None) -> ShiftStats:
-        from main.models import Order
+    def get_shift_statistics(self, start_time: datetime, end_time: datetime = None, cashier_id: int = None) -> ShiftStats:
+        from main.models import Order, OrderItem
         
         if end_time is None:
             end_time = get_uzb_time()
@@ -254,19 +290,83 @@ Rahmat, dam oling! 🌙
         if end_time.tzinfo is None:
             end_time = end_time.replace(tzinfo=UZB_TZ)
         
-        orders = Order.objects.filter(
-            created_at__gte=start_time,
-            created_at__lte=end_time
-        )
+        base_filter = Q(created_at__gte=start_time) & Q(created_at__lte=end_time)
+        if cashier_id:
+            base_filter &= Q(cashier_id=cashier_id)
+        
+        orders = Order.objects.filter(base_filter)
         
         total_orders = orders.count()
         paid_orders = orders.filter(is_paid=True).count()
         unpaid_orders = orders.filter(is_paid=False).exclude(status='CANCELLED').count()
         cancelled_orders = orders.filter(status='CANCELLED').count()
+        completed_orders = orders.filter(status='COMPLETED').count()
         
         total_revenue = orders.filter(is_paid=True).aggregate(
             total=Sum('total_amount')
-        )['total'] or Decimal('0.00')
+        )['total'] or Decimal('0')
+        
+        avg_order_value = orders.filter(is_paid=True).aggregate(
+            avg=Avg('total_amount')
+        )['avg'] or Decimal('0')
+        
+        orders_with_ready_time = orders.filter(
+            ready_at__isnull=False,
+            status__in=['READY', 'COMPLETED']
+        ).annotate(
+            prep_time=ExpressionWrapper(
+                F('ready_at') - F('created_at'),
+                output_field=DurationField()
+            )
+        )
+        
+        avg_prep_time_seconds = 0
+        if orders_with_ready_time.exists():
+            total_prep_time = sum(
+                (o.prep_time.total_seconds() for o in orders_with_ready_time if o.prep_time),
+                0
+            )
+            count = orders_with_ready_time.count()
+            avg_prep_time_seconds = total_prep_time / count if count > 0 else 0
+        
+        order_type_data = orders.values('order_type').annotate(
+            count=Count('id'),
+            revenue=Sum('total_amount', filter=Q(is_paid=True))
+        )
+        
+        order_types = {
+            'HALL': {'count': 0, 'revenue': Decimal('0')},
+            'DELIVERY': {'count': 0, 'revenue': Decimal('0')},
+            'PICKUP': {'count': 0, 'revenue': Decimal('0')},
+        }
+        
+        for item in order_type_data:
+            if item['order_type'] in order_types:
+                order_types[item['order_type']]['count'] = item['count']
+                order_types[item['order_type']]['revenue'] = item['revenue'] or Decimal('0')
+        
+        hourly_orders = orders.annotate(
+            hour=ExtractHour('created_at')
+        ).values('hour').annotate(
+            count=Count('id')
+        ).order_by('hour')
+        
+        peak_hour = {'hour': 0, 'count': 0}
+        
+        for h in hourly_orders:
+            if h['count'] > peak_hour['count']:
+                peak_hour = {'hour': h['hour'], 'count': h['count']}
+        
+        item_filter = Q(order__created_at__gte=start_time) & Q(order__created_at__lte=end_time) & Q(order__is_paid=True)
+        if cashier_id:
+            item_filter &= Q(order__cashier_id=cashier_id)
+        
+        top_products = list(OrderItem.objects.filter(item_filter).values(
+            'product__name'
+        ).annotate(
+            total_quantity=Sum('quantity'),
+            total_revenue=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
+        ).order_by('-total_quantity')[:5])
         
         duration_minutes = int((end_time - start_time).total_seconds() / 60)
         
@@ -276,17 +376,34 @@ Rahmat, dam oling! 🌙
             paid_orders=paid_orders,
             unpaid_orders=unpaid_orders,
             cancelled_orders=cancelled_orders,
-            duration_minutes=duration_minutes
+            completed_orders=completed_orders,
+            duration_minutes=duration_minutes,
+            avg_order_value=avg_order_value,
+            avg_prep_time_seconds=avg_prep_time_seconds,
+            order_types=order_types,
+            top_products=top_products,
+            peak_hour=peak_hour
         )
     
-    def _format_duration(self, minutes: int) -> str:
-        if minutes < 60:
-            return f"{minutes} daqiqa"
-        hours = minutes // 60
-        mins = minutes % 60
-        if mins == 0:
-            return f"{hours} soat"
-        return f"{hours} soat {mins} daqiqa"
+    def _format_prep_time(self, seconds: float) -> str:
+        if seconds == 0:
+            return "—"
+        minutes = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{minutes}:{secs:02d}"
+    
+    def _format_top_products(self, products: list) -> str:
+        if not products:
+            return "Ma'lumot yo'q"
+        
+        lines = []
+        for i, p in enumerate(products, 1):
+            name = p['product__name']
+            qty = p['total_quantity']
+            revenue = format_money(p['total_revenue'] or 0)
+            lines.append(f"{i}. {name} — {qty} ta ({revenue} so'm)")
+        
+        return "\n".join(lines)
     
     def _parse_login_time(self, iso_string: str) -> datetime:
         dt = datetime.fromisoformat(iso_string)
@@ -358,7 +475,7 @@ Rahmat, dam oling! 🌙
             'user_id': session['user_id'],
             'user_name': session['user_name'],
             'login_time': session['login_time'],
-            'duration': self._format_duration(duration_minutes),
+            'duration': format_duration(duration_minutes),
             'duration_minutes': duration_minutes
         }
     
@@ -408,56 +525,82 @@ Rahmat, dam oling! 🌙
         return success
     
     def _send_shift_end(self, session: dict) -> bool:
-        date_str, time_str = format_uzb_datetime()
+        now = get_uzb_time()
+        date_str, time_str = format_uzb_datetime(now)
         start_time = self._parse_login_time(session['login_time'])
-        stats = self.get_shift_statistics(start_time)
+        start_date, start_time_str = format_uzb_datetime(start_time)
+        
+        stats = self.get_shift_statistics(start_time, now, session['user_id'])
         
         stats_message = self.STATISTICS_TEMPLATE.format(
             cashier_name=session['user_name'],
-            duration=self._format_duration(stats.duration_minutes),
+            date_from=start_date,
+            time_from=start_time_str,
+            date_to=date_str,
+            time_to=time_str,
+            duration=format_duration(stats.duration_minutes),
             total_orders=stats.total_orders,
+            completed_orders=stats.completed_orders,
+            cancelled_orders=stats.cancelled_orders,
+            avg_prep_time=self._format_prep_time(stats.avg_prep_time_seconds),
+            peak_hour=f"{stats.peak_hour['hour']:02d}:00",
+            peak_count=stats.peak_hour['count'],
             paid_orders=stats.paid_orders,
             unpaid_orders=stats.unpaid_orders,
-            cancelled_orders=stats.cancelled_orders,
-            total_revenue=stats.total_revenue
+            hall_orders=stats.order_types['HALL']['count'],
+            hall_revenue=format_money(stats.order_types['HALL']['revenue']),
+            delivery_orders=stats.order_types['DELIVERY']['count'],
+            delivery_revenue=format_money(stats.order_types['DELIVERY']['revenue']),
+            pickup_orders=stats.order_types['PICKUP']['count'],
+            pickup_revenue=format_money(stats.order_types['PICKUP']['revenue']),
+            top_products_list=self._format_top_products(stats.top_products),
+            total_revenue=format_money(stats.total_revenue),
+            avg_order_value=format_money(stats.avg_order_value)
         ).strip()
         
         stats_sticker = self._get_stats_sticker(stats)
         if stats_sticker:
             TelegramService.send_sticker(stats_sticker)
         
-        TelegramService.send_message(stats_message)
-        
-        end_message = self.SHIFT_END_TEMPLATE.format(
-            cashier_name=session['user_name'],
-            date=date_str,
-            time=time_str,
-            duration=self._format_duration(stats.duration_minutes)
-        ).strip()
-        
-        end_sticker = STICKERS.get('shift_end')
-        if end_sticker:
-            TelegramService.send_sticker(end_sticker)
-        
-        success, error = TelegramService.send_message(end_message)
+        success, error = TelegramService.send_message(stats_message)
         
         if not success:
-            PendingQueue.add(end_message, "shift_end", end_sticker)
+            PendingQueue.add(stats_message, "shift_end", stats_sticker)
         
         return success
     
     def _send_shift_switch(self, old_session: dict, new_user_id: int, new_user_name: str) -> bool:
-        date_str, time_str = format_uzb_datetime()
+        now = get_uzb_time()
+        date_str, time_str = format_uzb_datetime(now)
         start_time = self._parse_login_time(old_session['login_time'])
-        stats = self.get_shift_statistics(start_time)
+        start_date, start_time_str = format_uzb_datetime(start_time)
+        
+        stats = self.get_shift_statistics(start_time, now, old_session['user_id'])
+        
         stats_message = self.STATISTICS_TEMPLATE.format(
             cashier_name=old_session['user_name'],
-            duration=self._format_duration(stats.duration_minutes),
+            date_from=start_date,
+            time_from=start_time_str,
+            date_to=date_str,
+            time_to=time_str,
+            duration=format_duration(stats.duration_minutes),
             total_orders=stats.total_orders,
+            completed_orders=stats.completed_orders,
+            cancelled_orders=stats.cancelled_orders,
+            avg_prep_time=self._format_prep_time(stats.avg_prep_time_seconds),
+            peak_hour=f"{stats.peak_hour['hour']:02d}:00",
+            peak_count=stats.peak_hour['count'],
             paid_orders=stats.paid_orders,
             unpaid_orders=stats.unpaid_orders,
-            cancelled_orders=stats.cancelled_orders,
-            total_revenue=stats.total_revenue
+            hall_orders=stats.order_types['HALL']['count'],
+            hall_revenue=format_money(stats.order_types['HALL']['revenue']),
+            delivery_orders=stats.order_types['DELIVERY']['count'],
+            delivery_revenue=format_money(stats.order_types['DELIVERY']['revenue']),
+            pickup_orders=stats.order_types['PICKUP']['count'],
+            pickup_revenue=format_money(stats.order_types['PICKUP']['revenue']),
+            top_products_list=self._format_top_products(stats.top_products),
+            total_revenue=format_money(stats.total_revenue),
+            avg_order_value=format_money(stats.avg_order_value)
         ).strip()
         
         stats_sticker = self._get_stats_sticker(stats)
@@ -483,6 +626,7 @@ Rahmat, dam oling! 🌙
             PendingQueue.add(switch_message, "shift_switch", switch_sticker)
         
         return success
+
 
 _service_instance: Optional[ShiftNotificationService] = None
 
