@@ -54,14 +54,10 @@ class OrderService:
     
     @staticmethod
     def _check_cashier_ownership(order, cashier_id):
-        """
-        Check if the cashier is allowed to modify this order.
-        Returns error dict if not allowed, None if allowed.
-        """
         if order.cashier_id and order.cashier_id != cashier_id:
             return {
                 'success': False,
-                'message': f'Sizda bu buyurtmani o\'zgartirish huquqi yo\'q. Buyurtma #{order.display_id} boshqa kassir tomonidan yaratilgan.'
+                'message': f'You do not have permission to edit this thing, go create your own or something. Order #{order.display_id} is not yours, dont be jealous create your own one and then edit it'
             }
         return None
     
