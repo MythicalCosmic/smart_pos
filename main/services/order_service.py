@@ -110,7 +110,7 @@ class OrderService:
                 'items_count': order.items.count(),
                 'items': list(order.items.values(
                     'id', 'product__id', 'product__name', 'product__category__id',
-                    'product__category__name', 'quantity', 'price', 'ready_at'
+                    'product__category__name', 'quantity', 'detail', 'price', 'ready_at'
                 )),
                 'paid_at': order.paid_at.isoformat() if order.paid_at else None,
                 'ready_at': order.ready_at,
