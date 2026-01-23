@@ -1,21 +1,8 @@
-"""
-Smart Jowi Models with Sync Support
-"""
-
 import uuid
 from django.db import models
 from django.conf import settings
 
-
-# =============================================================================
-# SYNC MIXIN - Add to all models that need syncing
-# =============================================================================
-
 class SyncMixin(models.Model):
-    """
-    Mixin that adds sync tracking to any model.
-    """
-    
     uuid = models.UUIDField(
         default=uuid.uuid4, 
         unique=True, 
@@ -39,28 +26,20 @@ class SyncMixin(models.Model):
         abstract = True
     
     def save(self, *args, **kwargs):
-        # Set branch_id on creation
         if not self.branch_id and hasattr(settings, 'BRANCH_ID'):
             self.branch_id = settings.BRANCH_ID
-        
-        # Increment version on updates
         if self.pk:
             self.sync_version += 1
-        
-        # Clear synced_at to mark as needing sync (only in local mode)
         if getattr(settings, 'DEPLOYMENT_MODE', 'local') == 'local':
             update_fields = kwargs.get('update_fields')
             if update_fields is None or any(f not in ['synced_at', 'sync_version'] for f in update_fields):
                 self.synced_at = None
         
         super().save(*args, **kwargs)
-        
-        # Queue for sync if enabled
         if getattr(settings, 'SYNC_ON_SAVE', False) and self.synced_at is None:
             self._queue_for_sync()
     
     def delete(self, *args, **kwargs):
-        """Soft delete by default."""
         hard_delete = kwargs.pop('hard_delete', False)
         if hard_delete:
             super().delete(*args, **kwargs)
@@ -79,15 +58,12 @@ class SyncMixin(models.Model):
             pass
     
     def to_sync_dict(self) -> dict:
-        """Convert to dictionary for sync."""
         data = {
             'uuid': str(self.uuid),
             'sync_version': self.sync_version,
             'is_deleted': self.is_deleted,
             'branch_id': self.branch_id,
         }
-        
-        # Add all concrete fields
         for field in self._meta.get_fields():
             if field.concrete and not field.is_relation:
                 if field.name not in ['id', 'uuid', 'synced_at', 'sync_version', 'is_deleted', 'branch_id']:
@@ -100,7 +76,6 @@ class SyncMixin(models.Model):
     
     @classmethod
     def from_sync_dict(cls, data: dict, branch_id: str = None):
-        """Create or update from sync data."""
         from django.utils import timezone
         
         uuid_val = data.pop('uuid')
@@ -137,8 +112,6 @@ class SyncMixin(models.Model):
 
 
 class SyncQuerySet(models.QuerySet):
-    """Custom QuerySet with sync-aware methods."""
-    
     def unsynced(self):
         return self.filter(
             models.Q(synced_at__isnull=True) |
@@ -153,8 +126,6 @@ class SyncQuerySet(models.QuerySet):
 
 
 class SyncManager(models.Manager):
-    """Manager that uses SyncQuerySet."""
-    
     def get_queryset(self):
         return SyncQuerySet(self.model, using=self._db)
     
@@ -163,11 +134,6 @@ class SyncManager(models.Manager):
     
     def active(self):
         return self.get_queryset().active()
-
-
-# =============================================================================
-# MODELS
-# =============================================================================
 
 class User(SyncMixin, models.Model):
     class RoleChoices(models.TextChoices):
@@ -203,7 +169,6 @@ class User(SyncMixin, models.Model):
 
     def to_sync_dict(self) -> dict:
         data = super().to_sync_dict()
-        # Don't sync password for security
         data.pop('password', None)
         return data
 
@@ -212,7 +177,6 @@ class User(SyncMixin, models.Model):
 
 
 class Session(models.Model):
-    """Sessions don't need sync - they're local only."""
     user_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     ip_address = models.CharField(max_length=20)
     user_agent = models.CharField(max_length=30, null=True, blank=True, default='Chrome')
@@ -263,7 +227,6 @@ class Product(SyncMixin, models.Model):
 
     @classmethod
     def from_sync_dict(cls, data: dict, branch_id: str = None):
-        """Handle category foreign key."""
         from django.utils import timezone
         
         data = data.copy()
@@ -407,8 +370,6 @@ class Order(SyncMixin, models.Model):
         sync_version = data.pop('sync_version', 1)
         is_deleted = data.pop('is_deleted', False)
         incoming_branch = data.pop('branch_id', branch_id)
-        
-        # Find related objects by UUID
         user = None
         cashier = None
         delivery_person = None
@@ -430,8 +391,6 @@ class Order(SyncMixin, models.Model):
                 delivery_person = DeliveryPerson.objects.get(uuid=delivery_person_uuid)
             except DeliveryPerson.DoesNotExist:
                 pass
-        
-        # Can't create order without user
         if not user:
             raise ValueError(f"User with UUID {user_uuid} not found - sync User first")
         

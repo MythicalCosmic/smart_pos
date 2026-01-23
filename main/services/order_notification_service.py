@@ -17,15 +17,13 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# Get bot token from settings
 BOT_TOKEN = getattr(settings, 'BOT_TOKEN', '')
 UZB_OFFSET = timedelta(hours=5)
 UZB_TZ = timezone(UZB_OFFSET)
-ORDER_MESSAGES_FILE = getattr(settings, 'ORDER_MESSAGES_FILE', 'order_messages.json')
-PENDING_ORDERS_FILE = getattr(settings, 'PENDING_ORDERS_FILE', 'pending_order_notifications.json')
+ORDER_MESSAGES_FILE = getattr(settings, 'ORDER_MESSAGES_FILE', 'data/order_messages.json')
+PENDING_ORDERS_FILE = getattr(settings, 'PENDING_ORDERS_FILE', 'data/pending_order_notifications.json')
 RETRY_INTERVAL_SECONDS = getattr(settings, 'RETRY_INTERVAL_SECONDS', 180)
 
-# Stickers
 STICKERS = getattr(settings, 'STICKERS', {})
 
 
@@ -52,22 +50,18 @@ def format_money(amount) -> str:
 
 
 def get_chat_ids() -> List[int]:
-    """Get chat IDs from bot config (dynamic)"""
     try:
         from main.bot.smart_jowi_bot import BotConfigStorage, is_notification_enabled
         
-        # Check if notifications are enabled
         if not is_notification_enabled('new_orders'):
             return []
         
         return BotConfigStorage.get_subscriber_ids()
     except ImportError:
-        # Fallback to settings if bot module not available
         return getattr(settings, 'CHAT_IDS', [])
 
 
 def is_order_notification_enabled() -> bool:
-    """Check if order notifications are enabled"""
     try:
         from main.bot.smart_jowi_bot import is_notification_enabled
         return is_notification_enabled('new_orders')
@@ -331,7 +325,6 @@ Kassir: <b>{cashier_name}</b>
         self._stop_retry = False
     
     def _get_chat_ids(self) -> List[int]:
-        """Get current chat IDs (dynamic)"""
         return get_chat_ids()
     
     def _get_status_text(self, status: str) -> str:

@@ -1,8 +1,3 @@
-"""
-Smart Jowi Telegram Bot with Dynamic Admin Management
-Uses aiogram for async Telegram bot operations
-"""
-
 import json
 import logging
 import asyncio
@@ -25,18 +20,7 @@ from aiogram.enums import ParseMode
 
 logger = logging.getLogger(__name__)
 
-
-# =============================================================================
-# BOT CONFIG STORAGE
-# =============================================================================
-
-class BotConfigStorage:
-    """
-    Stores bot configuration including:
-    - Admin IDs (who can access settings)
-    - Subscriber IDs (who receives notifications)
-    """
-    
+class BotConfigStorage:    
     CONFIG_FILE = Path("bot_config.json")
     
     _cache: Optional[Dict] = None
@@ -44,8 +28,8 @@ class BotConfigStorage:
     @classmethod
     def _get_default_config(cls) -> Dict:
         return {
-            "admin_ids": [],  # Users who can manage settings
-            "subscriber_ids": [],  # Users who receive notifications
+            "admin_ids": [],  
+            "subscriber_ids": [],  
             "settings": {
                 "notify_new_orders": True,
                 "notify_order_status": True,
@@ -91,7 +75,6 @@ class BotConfigStorage:
     
     @classmethod
     def get_all_chat_ids(cls) -> List[int]:
-        """Get all unique chat IDs (admins + subscribers)"""
         data = cls._read()
         all_ids = set(data.get('admin_ids', []))
         all_ids.update(data.get('subscriber_ids', []))
@@ -155,22 +138,16 @@ class BotConfigStorage:
     
     @classmethod
     def initialize_first_admin(cls, user_id: int):
-        """Initialize first admin if no admins exist"""
         data = cls._read()
         if not data.get('admin_ids'):
             data['admin_ids'] = [user_id]
-            data['subscriber_ids'] = [user_id]  # First admin is also subscriber
+            data['subscriber_ids'] = [user_id] 
             cls._write(data)
             return True
         return False
-
-
-# =============================================================================
-# PENDING MESSAGE QUEUE (for offline support)
-# =============================================================================
-
+    
 class PendingMessageQueue:
-    """Queue for messages that failed to send (offline support)"""
+
     
     QUEUE_FILE = Path("pending_bot_messages.json")
     
@@ -217,23 +194,12 @@ class PendingMessageQueue:
     def count(cls) -> int:
         return len(cls._read())
 
-
-# =============================================================================
-# FSM STATES
-# =============================================================================
-
 class AdminStates(StatesGroup):
     waiting_for_user_id = State()
     waiting_for_remove_id = State()
     confirm_remove = State()
 
-
-# =============================================================================
-# KEYBOARDS
-# =============================================================================
-
 def get_main_keyboard(is_admin: bool) -> ReplyKeyboardMarkup:
-    """Get main keyboard based on user role"""
     buttons = [
         [KeyboardButton(text="📊 Status"), KeyboardButton(text="ℹ️ Info")]
     ]
@@ -245,7 +211,6 @@ def get_main_keyboard(is_admin: bool) -> ReplyKeyboardMarkup:
 
 
 def get_settings_keyboard() -> InlineKeyboardMarkup:
-    """Settings menu keyboard"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👥 Manage Subscribers", callback_data="manage_subscribers")],
         [InlineKeyboardButton(text="👑 Manage Admins", callback_data="manage_admins")],
@@ -256,7 +221,6 @@ def get_settings_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_subscriber_management_keyboard() -> InlineKeyboardMarkup:
-    """Subscriber management keyboard"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Add Subscriber", callback_data="add_subscriber")],
         [InlineKeyboardButton(text="➖ Remove Subscriber", callback_data="remove_subscriber")],
@@ -266,7 +230,6 @@ def get_subscriber_management_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_admin_management_keyboard() -> InlineKeyboardMarkup:
-    """Admin management keyboard"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Add Admin", callback_data="add_admin")],
         [InlineKeyboardButton(text="➖ Remove Admin", callback_data="remove_admin")],
@@ -276,7 +239,6 @@ def get_admin_management_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_notification_settings_keyboard() -> InlineKeyboardMarkup:
-    """Notification settings keyboard"""
     settings = BotConfigStorage.get_settings()
     
     def status_emoji(key: str) -> str:
@@ -304,14 +266,7 @@ def get_cancel_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="❌ Cancel", callback_data="cancel_action")],
     ])
 
-
-# =============================================================================
-# BOT CLASS
-# =============================================================================
-
 class SmartJowiBot:
-    """Main bot class with all handlers"""
-    
     def __init__(self, token: str):
         self.token = token
         self.bot = Bot(token=token)
@@ -323,46 +278,36 @@ class SmartJowiBot:
         self.dp.include_router(self.router)
     
     def _setup_handlers(self):
-        """Register all handlers"""
-        
-        # Command handlers
         self.router.message.register(self.cmd_start, Command("start"))
         self.router.message.register(self.cmd_help, Command("help"))
         self.router.message.register(self.cmd_status, Command("status"))
-        
-        # Text button handlers
+
         self.router.message.register(self.btn_settings, F.text == "⚙️ Settings")
         self.router.message.register(self.btn_status, F.text == "📊 Status")
         self.router.message.register(self.btn_info, F.text == "ℹ️ Info")
-        
-        # Callback handlers
+
         self.router.callback_query.register(self.cb_manage_subscribers, F.data == "manage_subscribers")
         self.router.callback_query.register(self.cb_manage_admins, F.data == "manage_admins")
         self.router.callback_query.register(self.cb_notification_settings, F.data == "notification_settings")
         self.router.callback_query.register(self.cb_view_users, F.data == "view_users")
         self.router.callback_query.register(self.cb_close_settings, F.data == "close_settings")
         self.router.callback_query.register(self.cb_back_to_settings, F.data == "back_to_settings")
-        
-        # Subscriber management
+
         self.router.callback_query.register(self.cb_add_subscriber, F.data == "add_subscriber")
         self.router.callback_query.register(self.cb_remove_subscriber, F.data == "remove_subscriber")
         self.router.callback_query.register(self.cb_list_subscribers, F.data == "list_subscribers")
-        
-        # Admin management
+
         self.router.callback_query.register(self.cb_add_admin, F.data == "add_admin")
         self.router.callback_query.register(self.cb_remove_admin, F.data == "remove_admin")
         self.router.callback_query.register(self.cb_list_admins, F.data == "list_admins")
-        
-        # Toggle notifications
+
         self.router.callback_query.register(
             self.cb_toggle_notification, 
             F.data.startswith("toggle_")
         )
-        
-        # Cancel action
+
         self.router.callback_query.register(self.cb_cancel_action, F.data == "cancel_action")
-        
-        # State handlers
+
         self.router.message.register(
             self.handle_user_id_input,
             StateFilter(AdminStates.waiting_for_user_id)
@@ -372,16 +317,9 @@ class SmartJowiBot:
             StateFilter(AdminStates.waiting_for_remove_id)
         )
     
-    # =========================================================================
-    # COMMAND HANDLERS
-    # =========================================================================
-    
     async def cmd_start(self, message: Message):
-        """Handle /start command"""
         user_id = message.from_user.id
         user_name = message.from_user.full_name
-        
-        # Initialize first admin if no admins exist
         is_first_admin = BotConfigStorage.initialize_first_admin(user_id)
         is_admin = BotConfigStorage.is_admin(user_id)
         
@@ -402,7 +340,6 @@ class SmartJowiBot:
                 f"⚙️ <b>Settings</b> tugmasini bosing sozlamalarni boshqarish uchun."
             )
         else:
-            # Regular user - add as subscriber request
             text = (
                 f"👋 Salom, <b>{user_name}</b>!\n\n"
                 f"Bu Smart Jowi POS tizimining botiga xush kelibsiz.\n\n"
@@ -413,7 +350,6 @@ class SmartJowiBot:
         await message.answer(text, reply_markup=get_main_keyboard(is_admin))
     
     async def cmd_help(self, message: Message):
-        """Handle /help command"""
         is_admin = BotConfigStorage.is_admin(message.from_user.id)
         
         text = (
@@ -436,15 +372,9 @@ class SmartJowiBot:
         await message.answer(text)
     
     async def cmd_status(self, message: Message):
-        """Handle /status command"""
         await self.btn_status(message)
-    
-    # =========================================================================
-    # TEXT BUTTON HANDLERS
-    # =========================================================================
-    
+
     async def btn_settings(self, message: Message):
-        """Handle Settings button"""
         if not BotConfigStorage.is_admin(message.from_user.id):
             await message.answer("⛔ Siz admin emassiz!")
             return
@@ -456,7 +386,6 @@ class SmartJowiBot:
         await message.answer(text, reply_markup=get_settings_keyboard())
     
     async def btn_status(self, message: Message):
-        """Handle Status button"""
         admins = BotConfigStorage.get_admin_ids()
         subscribers = BotConfigStorage.get_subscriber_ids()
         settings = BotConfigStorage.get_settings()
@@ -479,7 +408,6 @@ class SmartJowiBot:
         await message.answer(text)
     
     async def btn_info(self, message: Message):
-        """Handle Info button"""
         user_id = message.from_user.id
         is_admin = BotConfigStorage.is_admin(user_id)
         is_subscriber = BotConfigStorage.is_subscriber(user_id)
@@ -497,12 +425,7 @@ class SmartJowiBot:
         )
         await message.answer(text)
     
-    # =========================================================================
-    # CALLBACK HANDLERS
-    # =========================================================================
-    
     async def cb_manage_subscribers(self, callback: CallbackQuery):
-        """Manage subscribers menu"""
         await callback.message.edit_text(
             "<b>👥 Subscriberlarni Boshqarish</b>\n\n"
             "Subscriberlar buyurtmalar va smena haqida xabar oladi.",
@@ -511,7 +434,6 @@ class SmartJowiBot:
         await callback.answer()
     
     async def cb_manage_admins(self, callback: CallbackQuery):
-        """Manage admins menu"""
         await callback.message.edit_text(
             "<b>👑 Adminlarni Boshqarish</b>\n\n"
             "Adminlar botni to'liq boshqara oladi.",
@@ -520,7 +442,6 @@ class SmartJowiBot:
         await callback.answer()
     
     async def cb_notification_settings(self, callback: CallbackQuery):
-        """Notification settings menu"""
         await callback.message.edit_text(
             "<b>🔔 Bildirishnoma Sozlamalari</b>\n\n"
             "Qaysi bildirishnomalarni olishni tanlang:",
@@ -529,7 +450,6 @@ class SmartJowiBot:
         await callback.answer()
     
     async def cb_view_users(self, callback: CallbackQuery):
-        """View all users"""
         admins = BotConfigStorage.get_admin_ids()
         subscribers = BotConfigStorage.get_subscriber_ids()
         
@@ -559,25 +479,18 @@ class SmartJowiBot:
         await callback.answer()
     
     async def cb_close_settings(self, callback: CallbackQuery):
-        """Close settings menu"""
         await callback.message.delete()
         await callback.answer("Sozlamalar yopildi")
     
     async def cb_back_to_settings(self, callback: CallbackQuery):
-        """Return to main settings menu"""
         await callback.message.edit_text(
             "<b>⚙️ Sozlamalar</b>\n\n"
             "Quyidagi bo'limlardan birini tanlang:",
             reply_markup=get_settings_keyboard()
         )
         await callback.answer()
-    
-    # =========================================================================
-    # SUBSCRIBER MANAGEMENT
-    # =========================================================================
-    
+
     async def cb_add_subscriber(self, callback: CallbackQuery, state: FSMContext):
-        """Start adding subscriber"""
         await state.set_state(AdminStates.waiting_for_user_id)
         await state.update_data(action="add_subscriber")
         
@@ -591,7 +504,6 @@ class SmartJowiBot:
         await callback.answer()
     
     async def cb_remove_subscriber(self, callback: CallbackQuery, state: FSMContext):
-        """Start removing subscriber"""
         subscribers = BotConfigStorage.get_subscriber_ids()
         
         if not subscribers:
@@ -611,7 +523,6 @@ class SmartJowiBot:
         await callback.answer()
     
     async def cb_list_subscribers(self, callback: CallbackQuery):
-        """List all subscribers"""
         subscribers = BotConfigStorage.get_subscriber_ids()
         
         if not subscribers:
@@ -627,12 +538,7 @@ class SmartJowiBot:
         )
         await callback.answer()
     
-    # =========================================================================
-    # ADMIN MANAGEMENT
-    # =========================================================================
-    
     async def cb_add_admin(self, callback: CallbackQuery, state: FSMContext):
-        """Start adding admin"""
         await state.set_state(AdminStates.waiting_for_user_id)
         await state.update_data(action="add_admin")
         
@@ -645,7 +551,6 @@ class SmartJowiBot:
         await callback.answer()
     
     async def cb_remove_admin(self, callback: CallbackQuery, state: FSMContext):
-        """Start removing admin"""
         admins = BotConfigStorage.get_admin_ids()
         
         if len(admins) <= 1:
@@ -665,7 +570,6 @@ class SmartJowiBot:
         await callback.answer()
     
     async def cb_list_admins(self, callback: CallbackQuery):
-        """List all admins"""
         admins = BotConfigStorage.get_admin_ids()
         
         text = f"<b>📋 Adminlar ({len(admins)})</b>\n\n"
@@ -677,13 +581,8 @@ class SmartJowiBot:
             reply_markup=get_admin_management_keyboard()
         )
         await callback.answer()
-    
-    # =========================================================================
-    # NOTIFICATION TOGGLE
-    # =========================================================================
-    
+
     async def cb_toggle_notification(self, callback: CallbackQuery):
-        """Toggle notification setting"""
         setting_key = callback.data.replace("toggle_", "")
         settings = BotConfigStorage.get_settings()
         
@@ -696,13 +595,8 @@ class SmartJowiBot:
         
         status = "yoqildi ✅" if new_value else "o'chirildi ❌"
         await callback.answer(f"Sozlama {status}")
-    
-    # =========================================================================
-    # CANCEL ACTION
-    # =========================================================================
-    
+
     async def cb_cancel_action(self, callback: CallbackQuery, state: FSMContext):
-        """Cancel current action"""
         await state.clear()
         await callback.message.edit_text(
             "<b>⚙️ Sozlamalar</b>\n\n"
@@ -711,12 +605,8 @@ class SmartJowiBot:
         )
         await callback.answer("Bekor qilindi")
     
-    # =========================================================================
-    # STATE HANDLERS
-    # =========================================================================
-    
+
     async def handle_user_id_input(self, message: Message, state: FSMContext):
-        """Handle user ID input for adding"""
         data = await state.get_data()
         action = data.get("action")
         
@@ -740,7 +630,6 @@ class SmartJowiBot:
                     f"✅ Subscriber qo'shildi!\n\nID: <code>{user_id}</code>",
                     reply_markup=get_main_keyboard(True)
                 )
-                # Try to notify the new subscriber
                 try:
                     await self.bot.send_message(
                         user_id,
@@ -757,7 +646,6 @@ class SmartJowiBot:
         
         elif action == "add_admin":
             success = BotConfigStorage.add_admin(user_id)
-            # Also add as subscriber
             BotConfigStorage.add_subscriber(user_id)
             
             if success:
@@ -765,11 +653,10 @@ class SmartJowiBot:
                     f"✅ Admin qo'shildi!\n\nID: <code>{user_id}</code>",
                     reply_markup=get_main_keyboard(True)
                 )
-                # Notify new admin
                 try:
                     await self.bot.send_message(
                         user_id,
-                        "👑 Siz Smart Jowi botiga admin qilib qo'shildingiz!\n"
+                        "👑 Siz Smart botiga admin qilib qo'shildingiz!\n"
                         "/start buyrug'ini yuboring."
                     )
                 except:
@@ -781,7 +668,6 @@ class SmartJowiBot:
                 )
     
     async def handle_remove_id_input(self, message: Message, state: FSMContext):
-        """Handle user ID input for removing"""
         data = await state.get_data()
         action = data.get("action")
         
@@ -829,12 +715,8 @@ class SmartJowiBot:
                     reply_markup=get_main_keyboard(True)
                 )
     
-    # =========================================================================
-    # MESSAGE SENDING (for external use)
-    # =========================================================================
-    
+
     async def send_to_subscribers(self, message: str, sticker_id: str = None) -> Dict:
-        """Send message to all subscribers"""
         subscribers = BotConfigStorage.get_subscriber_ids()
         
         if not subscribers:
@@ -854,7 +736,6 @@ class SmartJowiBot:
                 failed += 1
         
         if failed == len(subscribers):
-            # All failed - queue for later
             PendingMessageQueue.add(subscribers, message, sticker_id)
             return {"success": False, "message": "All failed, queued"}
         
@@ -865,7 +746,6 @@ class SmartJowiBot:
         }
     
     async def process_pending_messages(self) -> tuple[int, int]:
-        """Process pending messages queue"""
         pending = PendingMessageQueue.get_all()
         
         if not pending:
@@ -887,32 +767,19 @@ class SmartJowiBot:
             PendingMessageQueue.remove_first(sent)
         
         return sent, len(pending) - sent
-    
-    # =========================================================================
-    # RUN BOT
-    # =========================================================================
-    
+
     async def start(self):
-        """Start the bot"""
         logger.info("Starting Smart Jowi Bot...")
         await self.dp.start_polling(self.bot)
     
     async def stop(self):
-        """Stop the bot"""
         await self.bot.session.close()
 
-
-# =============================================================================
-# HELPER FOR EXTERNAL SERVICES
-# =============================================================================
-
 def get_chat_ids() -> List[int]:
-    """Get all subscriber chat IDs (for backward compatibility)"""
     return BotConfigStorage.get_subscriber_ids()
 
 
 def is_notification_enabled(notification_type: str) -> bool:
-    """Check if notification type is enabled"""
     settings = BotConfigStorage.get_settings()
     key = f"notify_{notification_type}"
     return settings.get(key, True)

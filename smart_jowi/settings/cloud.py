@@ -1,51 +1,23 @@
-"""
-Cloud settings for central server.
-SQLite database, receives sync from branches.
-
-Usage:
-    gunicorn smart_jowi.wsgi --env DJANGO_SETTINGS_MODULE=smart_jowi.settings.cloud
-    
-Environment variables:
-    ALLOWED_BRANCH_TOKENS - Comma-separated list of valid branch tokens
-"""
-
 from .base import *
-
-# =============================================================================
-# DEPLOYMENT MODE
-# =============================================================================
 DEPLOYMENT_MODE = 'cloud'
 
-
-# =============================================================================
-# SECURITY - Production settings
-# =============================================================================
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
-# HTTPS settings (disable for local network)
 SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False').lower() == 'true'
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 
-
-# =============================================================================
-# DATABASE - SQLite for cloud (simple setup)
-# =============================================================================
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db_cloud.sqlite3',
         'OPTIONS': {
-            'timeout': 30,  # Longer timeout for concurrent access
+            'timeout': 30,  
         }
     }
 }
 
-
-# =============================================================================
-# CACHE - Redis if available, fallback to local memory
-# =============================================================================
 REDIS_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1')
 
 try:
@@ -72,7 +44,6 @@ try:
         },
     }
 except:
-    # Fallback to local memory cache if Redis unavailable
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
@@ -85,28 +56,15 @@ except:
         },
     }
 
+SYNC_ENABLED = False  
 
-# =============================================================================
-# SYNC CONFIGURATION
-# =============================================================================
-SYNC_ENABLED = False  # Cloud doesn't push, only receives
-
-# Authorized branches that can sync to this cloud
 ALLOWED_BRANCH_TOKENS = ['branch-secret-token-12345']
 
-# Real-time updates via WebSocket
 REALTIME_UPDATES_ENABLED = True
 
-
-# =============================================================================
-# STATIC FILES - Production
-# =============================================================================
 STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
 
 
-# =============================================================================
-# LOGGING - Production
-# =============================================================================
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -144,10 +102,6 @@ LOGGING = {
     },
 }
 
-
-# =============================================================================
-# REST FRAMEWORK - Tighter throttling for cloud
-# =============================================================================
 REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
@@ -156,6 +110,6 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',
         'user': '1000/hour',
-        'sync': '60/minute',  # Special rate for sync endpoints
+        'sync': '60/minute',  
     }
 }

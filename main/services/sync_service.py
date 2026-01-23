@@ -18,13 +18,7 @@ from django.apps import apps
 
 logger = logging.getLogger(__name__)
 
-
-# =============================================================================
-# JSON ENCODER FOR DECIMAL AND OTHER TYPES
-# =============================================================================
-
 class DecimalEncoder(json.JSONEncoder):
-    """JSON encoder that handles Decimal, datetime, UUID types."""
     def default(self, obj):
         if isinstance(obj, Decimal):
             return str(obj)
@@ -33,12 +27,6 @@ class DecimalEncoder(json.JSONEncoder):
         if isinstance(obj, uuid_module.UUID):
             return str(obj)
         return super().default(obj)
-
-
-# =============================================================================
-# DATA CLASSES
-# =============================================================================
-
 @dataclass
 class SyncRecord:
     model_name: str
@@ -65,15 +53,7 @@ class SyncStatus:
     last_error: Optional[str]
 
 
-# =============================================================================
-# SYNC QUEUE
-# =============================================================================
-
 class SyncQueue:
-    """
-    File-based queue for offline sync support.
-    Survives app restarts and network outages.
-    """
     _lock = threading.Lock()
     
     @classmethod
@@ -91,7 +71,6 @@ class SyncQueue:
                     return [SyncRecord.from_dict(d) for d in data]
         except Exception as e:
             logger.error(f"Error reading sync queue: {e}")
-            # If corrupted, backup and reset
             try:
                 if path.exists():
                     backup_path = path.with_suffix('.json.corrupted')
@@ -105,13 +84,10 @@ class SyncQueue:
     def _write_queue(cls, records: List[SyncRecord]):
         path = cls._get_queue_path()
         try:
-            # Convert records to serializable format
             data = []
             for r in records:
                 record_dict = r.to_dict()
-                # Ensure all nested data is serializable by re-encoding
                 if 'data' in record_dict and isinstance(record_dict['data'], dict):
-                    # This handles any Decimal values in the data dict
                     serialized = json.dumps(record_dict['data'], cls=DecimalEncoder)
                     record_dict['data'] = json.loads(serialized)
                 data.append(record_dict)
@@ -175,13 +151,8 @@ class SyncQueue:
         with cls._lock:
             cls._write_queue([])
 
-
-# =============================================================================
-# SYNC STATUS TRACKER
-# =============================================================================
-
 class SyncStatusTracker:
-    _status_file = Path('sync_status.json')
+    _status_file = Path('data/sync_status.json')
     
     @classmethod
     def _read(cls) -> dict:
@@ -211,11 +182,6 @@ class SyncStatusTracker:
     @classmethod
     def get(cls) -> dict:
         return cls._read()
-
-
-# =============================================================================
-# MAIN SYNC SERVICE
-# =============================================================================
 
 class SyncService:
     SYNCABLE_MODELS = [
@@ -323,8 +289,7 @@ class SyncService:
             by_model[record.model_name].append(record)
         
         synced_uuids = []
-        
-        # Sync in dependency order (models with no FK first)
+
         MODEL_ORDER = [
             'main.user',
             'main.category', 
@@ -335,8 +300,7 @@ class SyncService:
             'main.cashregister',
             'main.inkassa',
         ]
-        
-        # Sort models by dependency order
+
         sorted_models = sorted(
             by_model.keys(),
             key=lambda m: MODEL_ORDER.index(m.lower()) if m.lower() in MODEL_ORDER else 999
@@ -428,11 +392,6 @@ class SyncService:
             summary[r.model_name] += 1
         return dict(summary)
 
-
-# =============================================================================
-# CLOUD RECEIVER SERVICE
-# =============================================================================
-
 class CloudReceiverService:
     @classmethod
     def is_branch_authorized(cls, branch_token: str) -> bool:
@@ -504,11 +463,6 @@ class CloudReceiverService:
         except Exception as e:
             logger.warning(f"Failed to broadcast sync update: {e}")
 
-
-# =============================================================================
-# BACKGROUND SYNC WORKER
-# =============================================================================
-
 class SyncWorker:
     _running = False
     _thread = None
@@ -548,12 +502,6 @@ class SyncWorker:
                 logger.exception("Error in sync loop")
                 time.sleep(retry_interval)
 
-
-# =============================================================================
-# AUTO-START HELPER
-# =============================================================================
-
 def start_sync_worker_on_ready():
-    """Call this from AppConfig.ready() to auto-start sync worker."""
     if SyncService.is_enabled() and SyncService.is_local_mode():
         threading.Timer(5.0, SyncWorker.start).start()
