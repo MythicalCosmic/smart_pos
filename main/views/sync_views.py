@@ -34,6 +34,13 @@ class SyncReceiveView(APIView):
     permission_classes = []
     
     def post(self, request):
+        # DEBUG - see what's coming in
+        print("="*50)
+        print("RECEIVED SYNC REQUEST:")
+        print(f"Headers: {dict(request.headers)}")
+        print(f"Data: {request.data}")
+        print("="*50)
+        
         if getattr(settings, 'DEPLOYMENT_MODE', '') != 'cloud':
             return Response(
                 {'error': 'Sync receive only available on cloud server'},
@@ -73,6 +80,7 @@ class SyncReceiveView(APIView):
                    f"created={result['created']}, updated={result['updated']}")
         
         return Response(result)
+
 
 
 class SyncStatusView(APIView):    

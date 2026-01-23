@@ -324,7 +324,26 @@ class SyncService:
         
         synced_uuids = []
         
-        for model_name, records in by_model.items():
+        # Sync in dependency order (models with no FK first)
+        MODEL_ORDER = [
+            'main.user',
+            'main.category', 
+            'main.deliveryperson',
+            'main.product',
+            'main.order',
+            'main.orderitem',
+            'main.cashregister',
+            'main.inkassa',
+        ]
+        
+        # Sort models by dependency order
+        sorted_models = sorted(
+            by_model.keys(),
+            key=lambda m: MODEL_ORDER.index(m.lower()) if m.lower() in MODEL_ORDER else 999
+        )
+        
+        for model_name in sorted_models:
+            records = by_model[model_name]
             try:
                 sync_result = cls._sync_model_batch(model_name, records)
                 
