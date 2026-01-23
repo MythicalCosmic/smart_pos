@@ -1,3 +1,7 @@
+"""
+Order Notification Service - Updated to use dynamic chat IDs
+"""
+
 import json
 import logging
 import requests
@@ -8,9 +12,22 @@ from typing import Optional, Dict, List
 from dataclasses import dataclass, asdict
 from threading import Thread, Lock
 import time
-from smart_jowi.settings import BOT_TOKEN, CHAT_IDS, UZB_TZ, STICKERS, ORDER_MESSAGES_FILE, PENDING_ORDERS_FILE, RETRY_INTERVAL_SECONDS
+
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+# Get bot token from settings
+BOT_TOKEN = getattr(settings, 'BOT_TOKEN', '')
+UZB_OFFSET = timedelta(hours=5)
+UZB_TZ = timezone(UZB_OFFSET)
+ORDER_MESSAGES_FILE = getattr(settings, 'ORDER_MESSAGES_FILE', 'order_messages.json')
+PENDING_ORDERS_FILE = getattr(settings, 'PENDING_ORDERS_FILE', 'pending_order_notifications.json')
+RETRY_INTERVAL_SECONDS = getattr(settings, 'RETRY_INTERVAL_SECONDS', 180)
+
+# Stickers
+STICKERS = getattr(settings, 'STICKERS', {})
+
 
 def get_uzb_time() -> datetime:
     return datetime.now(UZB_TZ)
@@ -32,6 +49,30 @@ def format_money(amount) -> str:
     if isinstance(amount, Decimal):
         amount = float(amount)
     return f"{amount:,.0f}"
+
+
+def get_chat_ids() -> List[int]:
+    """Get chat IDs from bot config (dynamic)"""
+    try:
+        from main.bot.smart_jowi_bot import BotConfigStorage, is_notification_enabled
+        
+        # Check if notifications are enabled
+        if not is_notification_enabled('new_orders'):
+            return []
+        
+        return BotConfigStorage.get_subscriber_ids()
+    except ImportError:
+        # Fallback to settings if bot module not available
+        return getattr(settings, 'CHAT_IDS', [])
+
+
+def is_order_notification_enabled() -> bool:
+    """Check if order notifications are enabled"""
+    try:
+        from main.bot.smart_jowi_bot import is_notification_enabled
+        return is_notification_enabled('new_orders')
+    except ImportError:
+        return True
 
 
 class TelegramAPI:
@@ -289,6 +330,10 @@ Kassir: <b>{cashier_name}</b>
         self._retry_thread = None
         self._stop_retry = False
     
+    def _get_chat_ids(self) -> List[int]:
+        """Get current chat IDs (dynamic)"""
+        return get_chat_ids()
+    
     def _get_status_text(self, status: str) -> str:
         return self.STATUS_FORMATS.get(status, status)
     
@@ -313,6 +358,9 @@ Kassir: <b>{cashier_name}</b>
         return ' '.join(tags)
     
     def on_new_order(self, order) -> dict:
+        if not is_order_notification_enabled():
+            return {'success': True, 'message': 'Notifications disabled'}
+        
         order_data = self._serialize_order(order)
         
         if not TelegramAPI.is_online():
@@ -323,6 +371,9 @@ Kassir: <b>{cashier_name}</b>
         return self._send_new_order(order_data)
     
     def on_order_status_change(self, order_id: int, new_status: str) -> dict:
+        if not is_order_notification_enabled():
+            return {'success': True, 'message': 'Notifications disabled'}
+        
         from main.models import Order
         
         try:
@@ -470,13 +521,18 @@ Kassir: <b>{cashier_name}</b>
         ).strip()
     
     def _send_new_order(self, order_data: dict) -> dict:
+        chat_ids = self._get_chat_ids()
+        
+        if not chat_ids:
+            return {'success': False, 'message': 'No subscribers'}
+        
         message = self._build_order_message(order_data, 'NEW')
         sticker_id = STICKERS.get('new_order')
         
         chat_message_map = {}
         success_count = 0
         
-        for chat_id in CHAT_IDS:
+        for chat_id in chat_ids:
             if sticker_id:
                 TelegramAPI.send_sticker(chat_id, sticker_id)
             
@@ -492,7 +548,7 @@ Kassir: <b>{cashier_name}</b>
         
         return {
             'success': success_count > 0,
-            'message': f'Sent to {success_count}/{len(CHAT_IDS)} chats',
+            'message': f'Sent to {success_count}/{len(chat_ids)} chats',
             'message_ids': chat_message_map
         }
     
@@ -516,6 +572,7 @@ Kassir: <b>{cashier_name}</b>
         }
     
     def _send_order_ready(self, order_data: dict) -> dict:
+        chat_ids = self._get_chat_ids()
         message_ids = OrderMessageStorage.get_message_ids(order_data['id'])
         
         if message_ids:
@@ -527,7 +584,7 @@ Kassir: <b>{cashier_name}</b>
         sticker_id = STICKERS.get('order_ready')
         
         success_count = 0
-        for chat_id in CHAT_IDS:
+        for chat_id in chat_ids:
             if sticker_id:
                 TelegramAPI.send_sticker(chat_id, sticker_id)
             
@@ -538,10 +595,11 @@ Kassir: <b>{cashier_name}</b>
         
         return {
             'success': success_count > 0,
-            'message': f'Ready notification sent to {success_count}/{len(CHAT_IDS)} chats'
+            'message': f'Ready notification sent to {success_count}/{len(chat_ids)} chats'
         }
     
     def _send_order_cancelled(self, order_data: dict) -> dict:
+        chat_ids = self._get_chat_ids()
         message_ids = OrderMessageStorage.get_message_ids(order_data['id'])
         
         if message_ids:
@@ -552,7 +610,7 @@ Kassir: <b>{cashier_name}</b>
         sticker_id = STICKERS.get('order_cancelled')
         
         success_count = 0
-        for chat_id in CHAT_IDS:
+        for chat_id in chat_ids:
             if sticker_id:
                 TelegramAPI.send_sticker(chat_id, sticker_id)
             
@@ -567,7 +625,7 @@ Kassir: <b>{cashier_name}</b>
         
         return {
             'success': success_count > 0,
-            'message': f'Cancelled notification sent to {success_count}/{len(CHAT_IDS)} chats'
+            'message': f'Cancelled notification sent to {success_count}/{len(chat_ids)} chats'
         }
     
     def _queue_notification(self, action: str, order_id: int, order_data: dict):
