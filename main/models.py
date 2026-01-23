@@ -260,6 +260,57 @@ class Product(SyncMixin, models.Model):
         data['category_uuid'] = str(self.category.uuid) if self.category else None
         return data
     
+
+    @classmethod
+    def from_sync_dict(cls, data: dict, branch_id: str = None):
+        """Handle category foreign key."""
+        from django.utils import timezone
+        
+        data = data.copy()
+        category_uuid = data.pop('category_uuid', None)
+        
+        uuid_val = data.pop('uuid')
+        sync_version = data.pop('sync_version', 1)
+        is_deleted = data.pop('is_deleted', False)
+        incoming_branch = data.pop('branch_id', branch_id)
+        
+        category = None
+        if category_uuid:
+            try:
+                category = Category.objects.get(uuid=category_uuid)
+            except Category.DoesNotExist:
+                pass
+        
+        try:
+            instance = cls.objects.get(uuid=uuid_val)
+            
+            if sync_version >= instance.sync_version:
+                for key, value in data.items():
+                    if hasattr(instance, key):
+                        setattr(instance, key, value)
+                if category:
+                    instance.category = category
+                instance.sync_version = sync_version
+                instance.is_deleted = is_deleted
+                instance.synced_at = timezone.now()
+                instance.save()
+            
+            return instance, 'updated'
+            
+        except cls.DoesNotExist:
+            instance = cls(
+                uuid=uuid_val,
+                sync_version=sync_version,
+                is_deleted=is_deleted,
+                branch_id=incoming_branch,
+                category=category,
+            )
+            for key, value in data.items():
+                if hasattr(instance, key):
+                    setattr(instance, key, value)
+            instance.save()
+            return instance, 'created'
+    
     def __str__(self):
         return self.name
 
@@ -342,9 +393,83 @@ class Order(SyncMixin, models.Model):
         data['cashier_uuid'] = str(self.cashier.uuid) if self.cashier else None
         data['delivery_person_uuid'] = str(self.delivery_person.uuid) if self.delivery_person else None
         return data
+    
+    @classmethod
+    def from_sync_dict(cls, data: dict, branch_id: str = None):
+        from django.utils import timezone
+        
+        data = data.copy()
+        user_uuid = data.pop('user_uuid', None)
+        cashier_uuid = data.pop('cashier_uuid', None)
+        delivery_person_uuid = data.pop('delivery_person_uuid', None)
+        
+        uuid_val = data.pop('uuid')
+        sync_version = data.pop('sync_version', 1)
+        is_deleted = data.pop('is_deleted', False)
+        incoming_branch = data.pop('branch_id', branch_id)
+        
+        # Find related objects by UUID
+        user = None
+        cashier = None
+        delivery_person = None
+        
+        if user_uuid:
+            try:
+                user = User.objects.get(uuid=user_uuid)
+            except User.DoesNotExist:
+                raise ValueError(f"User with UUID {user_uuid} not found")
+        
+        if cashier_uuid:
+            try:
+                cashier = User.objects.get(uuid=cashier_uuid)
+            except User.DoesNotExist:
+                pass
+        
+        if delivery_person_uuid:
+            try:
+                delivery_person = DeliveryPerson.objects.get(uuid=delivery_person_uuid)
+            except DeliveryPerson.DoesNotExist:
+                pass
+        
+        # Can't create order without user
+        if not user:
+            raise ValueError(f"User with UUID {user_uuid} not found - sync User first")
+        
+        try:
+            instance = cls.objects.get(uuid=uuid_val)
+            
+            if sync_version >= instance.sync_version:
+                for key, value in data.items():
+                    if hasattr(instance, key):
+                        setattr(instance, key, value)
+                instance.user = user
+                instance.cashier = cashier
+                instance.delivery_person = delivery_person
+                instance.sync_version = sync_version
+                instance.is_deleted = is_deleted
+                instance.synced_at = timezone.now()
+                instance.save()
+            
+            return instance, 'updated'
+            
+        except cls.DoesNotExist:
+            instance = cls(
+                uuid=uuid_val,
+                sync_version=sync_version,
+                is_deleted=is_deleted,
+                branch_id=incoming_branch,
+                user=user,
+                cashier=cashier,
+                delivery_person=delivery_person,
+            )
+            for key, value in data.items():
+                if hasattr(instance, key):
+                    setattr(instance, key, value)
+            instance.save()
+            return instance, 'created'
 
-    def __str__(self):
-        return f"Order #{self.display_id} - {self.order_type} - {self.status}"
+        def __str__(self):
+            return f"Order #{self.display_id} - {self.order_type} - {self.status}"
 
 
 class OrderItem(SyncMixin, models.Model):

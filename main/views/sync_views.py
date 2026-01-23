@@ -76,8 +76,13 @@ class SyncReceiveView(APIView):
         
         result = CloudReceiverService.receive_batch(model_name, branch_id, records)
         
+        # ADD THIS DEBUG:
+        print("="*50)
+        print(f"RECEIVE RESULT: {result}")
+        print("="*50)
+        
         logger.info(f"Sync received from {branch_id}: {model_name} - "
-                   f"created={result['created']}, updated={result['updated']}")
+                f"created={result['created']}, updated={result['updated']}")
         
         return Response(result)
 
