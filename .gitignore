@@ -11,7 +11,6 @@ __pycache__/
 *.pyc
 db.sqlite3
 /staticfiles/
-media/
 .vscode/
 .idea/
 .DS_Store
@@ -25,3 +24,4 @@ logs/
 celerybeat-schedule
 *.txt
 logger/logs.txt
+.db_cloud.sqlite3

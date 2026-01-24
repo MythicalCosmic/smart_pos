@@ -1,16 +1,14 @@
 import json
 import logging
-import asyncio
 from pathlib import Path
-from typing import Optional, List, Dict, Set
+from typing import Optional, List, Dict
 from datetime import datetime
-from functools import wraps
 
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.types import (
-    Message, CallbackQuery, 
+    Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
-    ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+    ReplyKeyboardMarkup, KeyboardButton
 )
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -20,243 +18,136 @@ from aiogram.enums import ParseMode
 
 logger = logging.getLogger(__name__)
 
-class BotConfigStorage:    
-    CONFIG_FILE = Path("bot_config.json")
-    
-    _cache: Optional[Dict] = None
-    
-    @classmethod
-    def _get_default_config(cls) -> Dict:
-        return {
-            "admin_ids": [],  
-            "subscriber_ids": [],  
-            "settings": {
-                "notify_new_orders": True,
-                "notify_order_status": True,
-                "notify_shift_changes": True,
-            },
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-        }
-    
-    @classmethod
-    def _read(cls) -> Dict:
-        if cls._cache is not None:
-            return cls._cache
-        
-        try:
-            if cls.CONFIG_FILE.exists():
-                with open(cls.CONFIG_FILE, 'r', encoding='utf-8') as f:
-                    cls._cache = json.load(f)
-                    return cls._cache
-        except Exception as e:
-            logger.error(f"Error reading bot config: {e}")
-        
-        cls._cache = cls._get_default_config()
-        return cls._cache
-    
-    @classmethod
-    def _write(cls, data: Dict):
-        try:
-            data['updated_at'] = datetime.now().isoformat()
-            with open(cls.CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            cls._cache = data
-        except Exception as e:
-            logger.error(f"Error writing bot config: {e}")
-    
-    @classmethod
-    def get_admin_ids(cls) -> List[int]:
-        return cls._read().get('admin_ids', [])
-    
-    @classmethod
-    def get_subscriber_ids(cls) -> List[int]:
-        return cls._read().get('subscriber_ids', [])
-    
-    @classmethod
-    def get_all_chat_ids(cls) -> List[int]:
-        data = cls._read()
-        all_ids = set(data.get('admin_ids', []))
-        all_ids.update(data.get('subscriber_ids', []))
-        return list(all_ids)
-    
-    @classmethod
-    def is_admin(cls, user_id: int) -> bool:
-        return user_id in cls.get_admin_ids()
-    
-    @classmethod
-    def is_subscriber(cls, user_id: int) -> bool:
-        return user_id in cls.get_subscriber_ids()
-    
-    @classmethod
-    def add_admin(cls, user_id: int) -> bool:
-        data = cls._read()
-        if user_id not in data['admin_ids']:
-            data['admin_ids'].append(user_id)
-            cls._write(data)
-            return True
-        return False
-    
-    @classmethod
-    def remove_admin(cls, user_id: int) -> bool:
-        data = cls._read()
-        if user_id in data['admin_ids']:
-            data['admin_ids'].remove(user_id)
-            cls._write(data)
-            return True
-        return False
-    
-    @classmethod
-    def add_subscriber(cls, user_id: int) -> bool:
-        data = cls._read()
-        if user_id not in data['subscriber_ids']:
-            data['subscriber_ids'].append(user_id)
-            cls._write(data)
-            return True
-        return False
-    
-    @classmethod
-    def remove_subscriber(cls, user_id: int) -> bool:
-        data = cls._read()
-        if user_id in data['subscriber_ids']:
-            data['subscriber_ids'].remove(user_id)
-            cls._write(data)
-            return True
-        return False
-    
-    @classmethod
-    def get_settings(cls) -> Dict:
-        return cls._read().get('settings', {})
-    
-    @classmethod
-    def update_setting(cls, key: str, value: bool):
-        data = cls._read()
-        if 'settings' not in data:
-            data['settings'] = {}
-        data['settings'][key] = value
-        cls._write(data)
-    
-    @classmethod
-    def initialize_first_admin(cls, user_id: int):
-        data = cls._read()
-        if not data.get('admin_ids'):
-            data['admin_ids'] = [user_id]
-            data['subscriber_ids'] = [user_id] 
-            cls._write(data)
-            return True
-        return False
-    
-class PendingMessageQueue:
+ADMIN_ID = 6589960007
 
-    
-    QUEUE_FILE = Path("pending_bot_messages.json")
-    
-    @classmethod
-    def _read(cls) -> List[Dict]:
-        try:
-            if cls.QUEUE_FILE.exists():
-                with open(cls.QUEUE_FILE, 'r', encoding='utf-8') as f:
-                    return json.load(f) or []
-        except:
-            pass
-        return []
-    
-    @classmethod
-    def _write(cls, data: List[Dict]):
-        with open(cls.QUEUE_FILE, 'w', encoding='utf-8') as f:
+MSG_NOT_AUTHORIZED = "⛔ You are not part of this system."
+MSG_WELCOME_ADMIN = "👋 Welcome, <b>{name}</b>!\n\nYou are the super admin.\nUse ⚙️ <b>Settings</b> to manage users."
+MSG_STATUS_TITLE = "<b>📊 System Status</b>\n\n"
+MSG_STATUS_USERS = "<b>Users:</b> {count}\n"
+MSG_STATUS_PENDING = "<b>Pending Messages:</b> {pending}"
+MSG_INFO_TITLE = "<b>ℹ️ Information</b>\n\n"
+MSG_INFO_BODY = "<b>Your ID:</b> <code>{user_id}</code>\n<b>Name:</b> {name}\n<b>Role:</b> {role}\n\n<b>Smart Jowi POS Bot v1.0</b>"
+MSG_SETTINGS_TITLE = "<b>⚙️ Settings</b>\n\nSelect an option:"
+MSG_USERS_TITLE = "<b>👥 Manage Users</b>\n\nUsers receive order and shift notifications."
+MSG_ADD_USER_PROMPT = "<b>➕ Add User</b>\n\nSend the user's Telegram ID:\n\n<i>Example: 123456789</i>"
+MSG_REMOVE_USER_PROMPT = "<b>➖ Remove User</b>\n\nCurrent users:\n{list}\n\nSend the ID to remove:"
+MSG_USER_ADDED = "✅ User added!\n\nID: <code>{user_id}</code>"
+MSG_USER_ADDED_NOTIFIED = "✅ User added and notified!\n\nID: <code>{user_id}</code>"
+MSG_USER_ADDED_NOT_NOTIFIED = "✅ User added but could not notify them.\n\nID: <code>{user_id}</code>"
+MSG_USER_EXISTS = "ℹ️ This user is already added.\n\nID: <code>{user_id}</code>"
+MSG_USER_REMOVED = "✅ User removed!\n\nID: <code>{user_id}</code>"
+MSG_USER_NOT_FOUND = "❌ This ID is not in the list.\n\nID: <code>{user_id}</code>"
+MSG_NO_USERS = "No users yet."
+MSG_USERS_LIST = "<b>📋 Users ({count})</b>\n\n{list}"
+MSG_INVALID_ID = "❌ Invalid format!\n\nSend only numbers.\nExample: <code>123456789</code>"
+MSG_CANCELLED = "Cancelled"
+MSG_SETTINGS_CLOSED = "Settings closed"
+MSG_VIEW_USERS_TITLE = "<b>📋 All Users</b>\n\n"
+MSG_ADMIN_SECTION = "<b>👑 Super Admin:</b>\n<code>{admin_id}</code>\n\n"
+MSG_USERS_SECTION = "<b>📨 Users:</b>\n{list}"
+MSG_NEW_USER_NOTIFICATION = "🎉 You have been added to Smart Jowi Bot!\nYou will now receive order notifications."
+MSG_UNKNOWN_COMMAND = "❓ Unknown command."
+
+CONFIG_FILE = Path("data/bot_config.json")
+
+
+def _get_default_config() -> Dict:
+    return {
+        "user_ids": [],
+        "created_at": datetime.now().isoformat(),
+        "updated_at": datetime.now().isoformat(),
+    }
+
+
+def _read_config() -> Dict:
+    try:
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error reading bot config: {e}")
+    return _get_default_config()
+
+
+def _write_config(data: Dict):
+    try:
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        data['updated_at'] = datetime.now().isoformat()
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-    
-    @classmethod
-    def add(cls, chat_ids: List[int], message: str, sticker_id: str = None):
-        queue = cls._read()
-        queue.append({
-            "chat_ids": chat_ids,
-            "message": message,
-            "sticker_id": sticker_id,
-            "created_at": datetime.now().isoformat()
-        })
-        cls._write(queue)
-    
-    @classmethod
-    def get_all(cls) -> List[Dict]:
-        return cls._read()
-    
-    @classmethod
-    def clear(cls):
-        cls._write([])
-    
-    @classmethod
-    def remove_first(cls, count: int):
-        queue = cls._read()
-        cls._write(queue[count:])
-    
-    @classmethod
-    def count(cls) -> int:
-        return len(cls._read())
+        logger.info(f"Config saved: {data}")
+    except Exception as e:
+        logger.error(f"Error writing bot config: {e}")
+
+
+def get_user_ids() -> List[int]:
+    return _read_config().get('user_ids', [])
+
+
+def is_admin(user_id: int) -> bool:
+    return user_id == ADMIN_ID
+
+
+def add_user(user_id: int) -> bool:
+    data = _read_config()
+    if 'user_ids' not in data:
+        data['user_ids'] = []
+    if user_id not in data['user_ids']:
+        data['user_ids'].append(user_id)
+        _write_config(data)
+        return True
+    return False
+
+
+def remove_user(user_id: int) -> bool:
+    data = _read_config()
+    if 'user_ids' not in data:
+        data['user_ids'] = []
+    if user_id in data['user_ids']:
+        data['user_ids'].remove(user_id)
+        _write_config(data)
+        return True
+    return False
+
+
+def get_all_chat_ids() -> List[int]:
+    users = get_user_ids()
+    all_ids = [ADMIN_ID]
+    for uid in users:
+        if uid not in all_ids:
+            all_ids.append(uid)
+    return all_ids
+
 
 class AdminStates(StatesGroup):
-    waiting_for_user_id = State()
+    waiting_for_add_id = State()
     waiting_for_remove_id = State()
-    confirm_remove = State()
 
-def get_main_keyboard(is_admin: bool) -> ReplyKeyboardMarkup:
-    buttons = [
-        [KeyboardButton(text="📊 Status"), KeyboardButton(text="ℹ️ Info")]
-    ]
-    
-    if is_admin:
-        buttons.append([KeyboardButton(text="⚙️ Settings")])
-    
-    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+
+def get_admin_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📊 Status"), KeyboardButton(text="ℹ️ Info")],
+            [KeyboardButton(text="⚙️ Settings")]
+        ],
+        resize_keyboard=True
+    )
 
 
 def get_settings_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👥 Manage Subscribers", callback_data="manage_subscribers")],
-        [InlineKeyboardButton(text="👑 Manage Admins", callback_data="manage_admins")],
-        [InlineKeyboardButton(text="🔔 Notification Settings", callback_data="notification_settings")],
+        [InlineKeyboardButton(text="👥 Manage Users", callback_data="manage_users")],
         [InlineKeyboardButton(text="📋 View All Users", callback_data="view_users")],
         [InlineKeyboardButton(text="❌ Close", callback_data="close_settings")],
     ])
 
 
-def get_subscriber_management_keyboard() -> InlineKeyboardMarkup:
+def get_user_management_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Add Subscriber", callback_data="add_subscriber")],
-        [InlineKeyboardButton(text="➖ Remove Subscriber", callback_data="remove_subscriber")],
-        [InlineKeyboardButton(text="📋 List Subscribers", callback_data="list_subscribers")],
-        [InlineKeyboardButton(text="⬅️ Back", callback_data="back_to_settings")],
-    ])
-
-
-def get_admin_management_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Add Admin", callback_data="add_admin")],
-        [InlineKeyboardButton(text="➖ Remove Admin", callback_data="remove_admin")],
-        [InlineKeyboardButton(text="📋 List Admins", callback_data="list_admins")],
-        [InlineKeyboardButton(text="⬅️ Back", callback_data="back_to_settings")],
-    ])
-
-
-def get_notification_settings_keyboard() -> InlineKeyboardMarkup:
-    settings = BotConfigStorage.get_settings()
-    
-    def status_emoji(key: str) -> str:
-        return "✅" if settings.get(key, True) else "❌"
-    
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text=f"{status_emoji('notify_new_orders')} New Orders",
-            callback_data="toggle_notify_new_orders"
-        )],
-        [InlineKeyboardButton(
-            text=f"{status_emoji('notify_order_status')} Order Status Changes",
-            callback_data="toggle_notify_order_status"
-        )],
-        [InlineKeyboardButton(
-            text=f"{status_emoji('notify_shift_changes')} Shift Changes",
-            callback_data="toggle_notify_shift_changes"
-        )],
+        [InlineKeyboardButton(text="➕ Add User", callback_data="add_user")],
+        [InlineKeyboardButton(text="➖ Remove User", callback_data="remove_user")],
+        [InlineKeyboardButton(text="📋 List Users", callback_data="list_users")],
         [InlineKeyboardButton(text="⬅️ Back", callback_data="back_to_settings")],
     ])
 
@@ -266,6 +157,13 @@ def get_cancel_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="❌ Cancel", callback_data="cancel_action")],
     ])
 
+
+def get_back_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Back", callback_data="back_to_settings")],
+    ])
+
+
 class SmartJowiBot:
     def __init__(self, token: str):
         self.token = token
@@ -273,513 +171,215 @@ class SmartJowiBot:
         self.storage = MemoryStorage()
         self.dp = Dispatcher(storage=self.storage)
         self.router = Router()
-        
         self._setup_handlers()
         self.dp.include_router(self.router)
-    
+
     def _setup_handlers(self):
         self.router.message.register(self.cmd_start, Command("start"))
-        self.router.message.register(self.cmd_help, Command("help"))
-        self.router.message.register(self.cmd_status, Command("status"))
-
         self.router.message.register(self.btn_settings, F.text == "⚙️ Settings")
         self.router.message.register(self.btn_status, F.text == "📊 Status")
         self.router.message.register(self.btn_info, F.text == "ℹ️ Info")
-
-        self.router.callback_query.register(self.cb_manage_subscribers, F.data == "manage_subscribers")
-        self.router.callback_query.register(self.cb_manage_admins, F.data == "manage_admins")
-        self.router.callback_query.register(self.cb_notification_settings, F.data == "notification_settings")
+        self.router.callback_query.register(self.cb_manage_users, F.data == "manage_users")
         self.router.callback_query.register(self.cb_view_users, F.data == "view_users")
         self.router.callback_query.register(self.cb_close_settings, F.data == "close_settings")
         self.router.callback_query.register(self.cb_back_to_settings, F.data == "back_to_settings")
-
-        self.router.callback_query.register(self.cb_add_subscriber, F.data == "add_subscriber")
-        self.router.callback_query.register(self.cb_remove_subscriber, F.data == "remove_subscriber")
-        self.router.callback_query.register(self.cb_list_subscribers, F.data == "list_subscribers")
-
-        self.router.callback_query.register(self.cb_add_admin, F.data == "add_admin")
-        self.router.callback_query.register(self.cb_remove_admin, F.data == "remove_admin")
-        self.router.callback_query.register(self.cb_list_admins, F.data == "list_admins")
-
-        self.router.callback_query.register(
-            self.cb_toggle_notification, 
-            F.data.startswith("toggle_")
-        )
-
+        self.router.callback_query.register(self.cb_add_user, F.data == "add_user")
+        self.router.callback_query.register(self.cb_remove_user, F.data == "remove_user")
+        self.router.callback_query.register(self.cb_list_users, F.data == "list_users")
         self.router.callback_query.register(self.cb_cancel_action, F.data == "cancel_action")
+        self.router.message.register(self.handle_add_id, StateFilter(AdminStates.waiting_for_add_id))
+        self.router.message.register(self.handle_remove_id, StateFilter(AdminStates.waiting_for_remove_id))
+        self.router.message.register(self.handle_unknown)
 
-        self.router.message.register(
-            self.handle_user_id_input,
-            StateFilter(AdminStates.waiting_for_user_id)
-        )
-        self.router.message.register(
-            self.handle_remove_id_input,
-            StateFilter(AdminStates.waiting_for_remove_id)
-        )
-    
     async def cmd_start(self, message: Message):
         user_id = message.from_user.id
         user_name = message.from_user.full_name
-        is_first_admin = BotConfigStorage.initialize_first_admin(user_id)
-        is_admin = BotConfigStorage.is_admin(user_id)
-        
-        if is_first_admin:
-            text = (
-                f"👋 Salom, <b>{user_name}</b>!\n\n"
-                f"Siz birinchi admin sifatida ro'yxatdan o'tdingiz!\n\n"
-                f"Bot orqali quyidagilarni qilishingiz mumkin:\n"
-                f"• Buyurtmalar haqida xabar olish\n"
-                f"• Smena hisobotlarini ko'rish\n"
-                f"• Boshqa foydalanuvchilarni qo'shish\n\n"
-                f"⚙️ <b>Settings</b> tugmasini bosing sozlamalarni ko'rish uchun."
-            )
-        elif is_admin:
-            text = (
-                f"👋 Salom, <b>{user_name}</b>!\n\n"
-                f"Siz admin sifatida tizimga kirdingiz.\n"
-                f"⚙️ <b>Settings</b> tugmasini bosing sozlamalarni boshqarish uchun."
-            )
-        else:
-            text = (
-                f"👋 Salom, <b>{user_name}</b>!\n\n"
-                f"Bu Smart Jowi POS tizimining botiga xush kelibsiz.\n\n"
-                f"Sizning ID: <code>{user_id}</code>\n\n"
-                f"Xabarlar olish uchun admindan so'rang sizni subscriber qilib qo'yishini."
-            )
-        
-        await message.answer(text, reply_markup=get_main_keyboard(is_admin))
-    
-    async def cmd_help(self, message: Message):
-        is_admin = BotConfigStorage.is_admin(message.from_user.id)
-        
-        text = (
-            "<b>📖 Yordam</b>\n\n"
-            "<b>Asosiy buyruqlar:</b>\n"
-            "/start - Botni ishga tushirish\n"
-            "/status - Tizim holati\n"
-            "/help - Yordam\n\n"
+        if is_admin(user_id):
+            text = MSG_WELCOME_ADMIN.format(name=user_name)
+            await message.answer(text, reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
+            return
+
+    async def btn_status(self, message: Message):
+        if not is_admin(message.from_user.id):
+            return
+        users = get_user_ids()
+        text = MSG_STATUS_TITLE
+        text += MSG_STATUS_USERS.format(count=len(users))
+        text += MSG_STATUS_PENDING.format(pending=0)
+        await message.answer(text, parse_mode=ParseMode.HTML)
+
+    async def btn_info(self, message: Message):
+        if not is_admin(message.from_user.id):
+            return
+        text = MSG_INFO_TITLE + MSG_INFO_BODY.format(
+            user_id=message.from_user.id,
+            name=message.from_user.full_name,
+            role="👑 Super Admin"
         )
-        
-        if is_admin:
-            text += (
-                "<b>Admin buyruqlari:</b>\n"
-                "⚙️ Settings - Sozlamalarni boshqarish\n"
-                "• Subscriber qo'shish/o'chirish\n"
-                "• Admin qo'shish/o'chirish\n"
-                "• Bildirishnoma sozlamalari\n"
-            )
-        
-        await message.answer(text)
-    
-    async def cmd_status(self, message: Message):
-        await self.btn_status(message)
+        await message.answer(text, parse_mode=ParseMode.HTML)
 
     async def btn_settings(self, message: Message):
-        if not BotConfigStorage.is_admin(message.from_user.id):
-            await message.answer("⛔ Siz admin emassiz!")
+        if not is_admin(message.from_user.id):
             return
-        
-        text = (
-            "<b>⚙️ Sozlamalar</b>\n\n"
-            "Quyidagi bo'limlardan birini tanlang:"
-        )
-        await message.answer(text, reply_markup=get_settings_keyboard())
-    
-    async def btn_status(self, message: Message):
-        admins = BotConfigStorage.get_admin_ids()
-        subscribers = BotConfigStorage.get_subscriber_ids()
-        settings = BotConfigStorage.get_settings()
-        pending = PendingMessageQueue.count()
-        
-        def bool_emoji(val: bool) -> str:
-            return "✅" if val else "❌"
-        
-        text = (
-            "<b>📊 Tizim Holati</b>\n\n"
-            f"<b>Foydalanuvchilar:</b>\n"
-            f"• Adminlar: {len(admins)}\n"
-            f"• Subscriberlar: {len(subscribers)}\n\n"
-            f"<b>Bildirishnomalar:</b>\n"
-            f"• Yangi buyurtmalar: {bool_emoji(settings.get('notify_new_orders', True))}\n"
-            f"• Status o'zgarishi: {bool_emoji(settings.get('notify_order_status', True))}\n"
-            f"• Smena o'zgarishi: {bool_emoji(settings.get('notify_shift_changes', True))}\n\n"
-            f"<b>Kutilayotgan xabarlar:</b> {pending}"
-        )
-        await message.answer(text)
-    
-    async def btn_info(self, message: Message):
-        user_id = message.from_user.id
-        is_admin = BotConfigStorage.is_admin(user_id)
-        is_subscriber = BotConfigStorage.is_subscriber(user_id)
-        
-        role = "👑 Admin" if is_admin else ("📨 Subscriber" if is_subscriber else "👤 Guest")
-        
-        text = (
-            "<b>ℹ️ Ma'lumot</b>\n\n"
-            f"<b>Sizning ID:</b> <code>{user_id}</code>\n"
-            f"<b>Ism:</b> {message.from_user.full_name}\n"
-            f"<b>Username:</b> @{message.from_user.username or 'yo\'q'}\n"
-            f"<b>Rol:</b> {role}\n\n"
-            f"<b>Bot versiyasi:</b> 1.0.0\n"
-            f"<b>Smart Jowi POS</b>"
-        )
-        await message.answer(text)
-    
-    async def cb_manage_subscribers(self, callback: CallbackQuery):
-        await callback.message.edit_text(
-            "<b>👥 Subscriberlarni Boshqarish</b>\n\n"
-            "Subscriberlar buyurtmalar va smena haqida xabar oladi.",
-            reply_markup=get_subscriber_management_keyboard()
-        )
+        await message.answer(MSG_SETTINGS_TITLE, reply_markup=get_settings_keyboard(), parse_mode=ParseMode.HTML)
+
+    async def cb_manage_users(self, callback: CallbackQuery):
+        if not is_admin(callback.from_user.id):
+            await callback.answer()
+            return
+        await callback.message.edit_text(MSG_USERS_TITLE, reply_markup=get_user_management_keyboard(), parse_mode=ParseMode.HTML)
         await callback.answer()
-    
-    async def cb_manage_admins(self, callback: CallbackQuery):
-        await callback.message.edit_text(
-            "<b>👑 Adminlarni Boshqarish</b>\n\n"
-            "Adminlar botni to'liq boshqara oladi.",
-            reply_markup=get_admin_management_keyboard()
-        )
-        await callback.answer()
-    
-    async def cb_notification_settings(self, callback: CallbackQuery):
-        await callback.message.edit_text(
-            "<b>🔔 Bildirishnoma Sozlamalari</b>\n\n"
-            "Qaysi bildirishnomalarni olishni tanlang:",
-            reply_markup=get_notification_settings_keyboard()
-        )
-        await callback.answer()
-    
+
     async def cb_view_users(self, callback: CallbackQuery):
-        admins = BotConfigStorage.get_admin_ids()
-        subscribers = BotConfigStorage.get_subscriber_ids()
-        
-        text = "<b>📋 Barcha Foydalanuvchilar</b>\n\n"
-        
-        text += "<b>👑 Adminlar:</b>\n"
-        if admins:
-            for i, uid in enumerate(admins, 1):
-                text += f"{i}. <code>{uid}</code>\n"
+        if not is_admin(callback.from_user.id):
+            await callback.answer()
+            return
+        users = get_user_ids()
+        text = MSG_VIEW_USERS_TITLE
+        text += MSG_ADMIN_SECTION.format(admin_id=ADMIN_ID)
+        if users:
+            user_list = "\n".join([f"{i}. <code>{uid}</code>" for i, uid in enumerate(users, 1)])
         else:
-            text += "Yo'q\n"
-        
-        text += "\n<b>📨 Subscriberlar:</b>\n"
-        if subscribers:
-            for i, uid in enumerate(subscribers, 1):
-                marker = " 👑" if uid in admins else ""
-                text += f"{i}. <code>{uid}</code>{marker}\n"
-        else:
-            text += "Yo'q\n"
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="⬅️ Back", callback_data="back_to_settings")]
-            ])
-        )
+            user_list = MSG_NO_USERS
+        text += MSG_USERS_SECTION.format(list=user_list)
+        await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode=ParseMode.HTML)
         await callback.answer()
-    
+
     async def cb_close_settings(self, callback: CallbackQuery):
         await callback.message.delete()
-        await callback.answer("Sozlamalar yopildi")
-    
+        await callback.answer(MSG_SETTINGS_CLOSED)
+
     async def cb_back_to_settings(self, callback: CallbackQuery):
-        await callback.message.edit_text(
-            "<b>⚙️ Sozlamalar</b>\n\n"
-            "Quyidagi bo'limlardan birini tanlang:",
-            reply_markup=get_settings_keyboard()
-        )
+        if not is_admin(callback.from_user.id):
+            await callback.answer()
+            return
+        await callback.message.edit_text(MSG_SETTINGS_TITLE, reply_markup=get_settings_keyboard(), parse_mode=ParseMode.HTML)
         await callback.answer()
 
-    async def cb_add_subscriber(self, callback: CallbackQuery, state: FSMContext):
-        await state.set_state(AdminStates.waiting_for_user_id)
-        await state.update_data(action="add_subscriber")
-        
-        await callback.message.edit_text(
-            "<b>➕ Subscriber Qo'shish</b>\n\n"
-            "Foydalanuvchi ID raqamini yuboring:\n\n"
-            "<i>Masalan: 123456789</i>\n\n"
-            "💡 Foydalanuvchi o'z ID sini /start buyrug'i orqali bilishi mumkin.",
-            reply_markup=get_cancel_keyboard()
-        )
-        await callback.answer()
-    
-    async def cb_remove_subscriber(self, callback: CallbackQuery, state: FSMContext):
-        subscribers = BotConfigStorage.get_subscriber_ids()
-        
-        if not subscribers:
-            await callback.answer("Hech qanday subscriber yo'q!", show_alert=True)
+    async def cb_add_user(self, callback: CallbackQuery, state: FSMContext):
+        if not is_admin(callback.from_user.id):
+            await callback.answer()
             return
-        
-        await state.set_state(AdminStates.waiting_for_remove_id)
-        await state.update_data(action="remove_subscriber")
-        
-        text = "<b>➖ Subscriber O'chirish</b>\n\n"
-        text += "Mavjud subscriberlar:\n"
-        for i, uid in enumerate(subscribers, 1):
-            text += f"{i}. <code>{uid}</code>\n"
-        text += "\nO'chirmoqchi bo'lgan ID ni yuboring:"
-        
-        await callback.message.edit_text(text, reply_markup=get_cancel_keyboard())
+        await state.set_state(AdminStates.waiting_for_add_id)
+        await callback.message.edit_text(MSG_ADD_USER_PROMPT, reply_markup=get_cancel_keyboard(), parse_mode=ParseMode.HTML)
         await callback.answer()
-    
-    async def cb_list_subscribers(self, callback: CallbackQuery):
-        subscribers = BotConfigStorage.get_subscriber_ids()
-        
-        if not subscribers:
-            text = "<b>📋 Subscriberlar</b>\n\nHech kim yo'q."
+
+    async def cb_remove_user(self, callback: CallbackQuery, state: FSMContext):
+        if not is_admin(callback.from_user.id):
+            await callback.answer()
+            return
+        users = get_user_ids()
+        if not users:
+            await callback.answer(MSG_NO_USERS, show_alert=True)
+            return
+        await state.set_state(AdminStates.waiting_for_remove_id)
+        user_list = "\n".join([f"{i}. <code>{uid}</code>" for i, uid in enumerate(users, 1)])
+        text = MSG_REMOVE_USER_PROMPT.format(list=user_list)
+        await callback.message.edit_text(text, reply_markup=get_cancel_keyboard(), parse_mode=ParseMode.HTML)
+        await callback.answer()
+
+    async def cb_list_users(self, callback: CallbackQuery):
+        if not is_admin(callback.from_user.id):
+            await callback.answer()
+            return
+        users = get_user_ids()
+        if not users:
+            text = MSG_USERS_LIST.format(count=0, list=MSG_NO_USERS)
         else:
-            text = f"<b>📋 Subscriberlar ({len(subscribers)})</b>\n\n"
-            for i, uid in enumerate(subscribers, 1):
-                text += f"{i}. <code>{uid}</code>\n"
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=get_subscriber_management_keyboard()
-        )
+            user_list = "\n".join([f"{i}. <code>{uid}</code>" for i, uid in enumerate(users, 1)])
+            text = MSG_USERS_LIST.format(count=len(users), list=user_list)
+        await callback.message.edit_text(text, reply_markup=get_user_management_keyboard(), parse_mode=ParseMode.HTML)
         await callback.answer()
-    
-    async def cb_add_admin(self, callback: CallbackQuery, state: FSMContext):
-        await state.set_state(AdminStates.waiting_for_user_id)
-        await state.update_data(action="add_admin")
-        
-        await callback.message.edit_text(
-            "<b>➕ Admin Qo'shish</b>\n\n"
-            "Foydalanuvchi ID raqamini yuboring:\n\n"
-            "<i>Masalan: 123456789</i>",
-            reply_markup=get_cancel_keyboard()
-        )
-        await callback.answer()
-    
-    async def cb_remove_admin(self, callback: CallbackQuery, state: FSMContext):
-        admins = BotConfigStorage.get_admin_ids()
-        
-        if len(admins) <= 1:
-            await callback.answer("Oxirgi adminni o'chirish mumkin emas!", show_alert=True)
-            return
-        
-        await state.set_state(AdminStates.waiting_for_remove_id)
-        await state.update_data(action="remove_admin")
-        
-        text = "<b>➖ Admin O'chirish</b>\n\n"
-        text += "Mavjud adminlar:\n"
-        for i, uid in enumerate(admins, 1):
-            text += f"{i}. <code>{uid}</code>\n"
-        text += "\nO'chirmoqchi bo'lgan ID ni yuboring:"
-        
-        await callback.message.edit_text(text, reply_markup=get_cancel_keyboard())
-        await callback.answer()
-    
-    async def cb_list_admins(self, callback: CallbackQuery):
-        admins = BotConfigStorage.get_admin_ids()
-        
-        text = f"<b>📋 Adminlar ({len(admins)})</b>\n\n"
-        for i, uid in enumerate(admins, 1):
-            text += f"{i}. <code>{uid}</code>\n"
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=get_admin_management_keyboard()
-        )
-        await callback.answer()
-
-    async def cb_toggle_notification(self, callback: CallbackQuery):
-        setting_key = callback.data.replace("toggle_", "")
-        settings = BotConfigStorage.get_settings()
-        
-        new_value = not settings.get(setting_key, True)
-        BotConfigStorage.update_setting(setting_key, new_value)
-        
-        await callback.message.edit_reply_markup(
-            reply_markup=get_notification_settings_keyboard()
-        )
-        
-        status = "yoqildi ✅" if new_value else "o'chirildi ❌"
-        await callback.answer(f"Sozlama {status}")
 
     async def cb_cancel_action(self, callback: CallbackQuery, state: FSMContext):
         await state.clear()
-        await callback.message.edit_text(
-            "<b>⚙️ Sozlamalar</b>\n\n"
-            "Quyidagi bo'limlardan birini tanlang:",
-            reply_markup=get_settings_keyboard()
-        )
-        await callback.answer("Bekor qilindi")
-    
+        await callback.message.edit_text(MSG_SETTINGS_TITLE, reply_markup=get_settings_keyboard(), parse_mode=ParseMode.HTML)
+        await callback.answer(MSG_CANCELLED)
 
-    async def handle_user_id_input(self, message: Message, state: FSMContext):
-        data = await state.get_data()
-        action = data.get("action")
-        
+    async def handle_add_id(self, message: Message, state: FSMContext):
+        if not is_admin(message.from_user.id):
+            await state.clear()
+            return
         try:
             user_id = int(message.text.strip())
         except ValueError:
-            await message.answer(
-                "❌ Noto'g'ri format!\n\n"
-                "Faqat raqam yuboring.\n"
-                "Masalan: <code>123456789</code>",
-                reply_markup=get_cancel_keyboard()
-            )
+            await message.answer(MSG_INVALID_ID, parse_mode=ParseMode.HTML)
             return
-        
         await state.clear()
-        
-        if action == "add_subscriber":
-            success = BotConfigStorage.add_subscriber(user_id)
-            if success:
-                await message.answer(
-                    f"✅ Subscriber qo'shildi!\n\nID: <code>{user_id}</code>",
-                    reply_markup=get_main_keyboard(True)
-                )
-                try:
-                    await self.bot.send_message(
-                        user_id,
-                        "🎉 Siz Smart Jowi botiga subscriber qilib qo'shildingiz!\n"
-                        "Endi buyurtmalar haqida xabar olasiz."
-                    )
-                except:
-                    pass
+        success = add_user(user_id)
+        if success:
+            notified = False
+            try:
+                await self.bot.send_message(user_id, MSG_NEW_USER_NOTIFICATION, parse_mode=ParseMode.HTML)
+                notified = True
+            except:
+                pass
+            if notified:
+                await message.answer(MSG_USER_ADDED_NOTIFIED.format(user_id=user_id), reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
             else:
-                await message.answer(
-                    f"ℹ️ Bu foydalanuvchi allaqachon subscriber.\n\nID: <code>{user_id}</code>",
-                    reply_markup=get_main_keyboard(True)
-                )
-        
-        elif action == "add_admin":
-            success = BotConfigStorage.add_admin(user_id)
-            BotConfigStorage.add_subscriber(user_id)
-            
-            if success:
-                await message.answer(
-                    f"✅ Admin qo'shildi!\n\nID: <code>{user_id}</code>",
-                    reply_markup=get_main_keyboard(True)
-                )
-                try:
-                    await self.bot.send_message(
-                        user_id,
-                        "👑 Siz Smart botiga admin qilib qo'shildingiz!\n"
-                        "/start buyrug'ini yuboring."
-                    )
-                except:
-                    pass
-            else:
-                await message.answer(
-                    f"ℹ️ Bu foydalanuvchi allaqachon admin.\n\nID: <code>{user_id}</code>",
-                    reply_markup=get_main_keyboard(True)
-                )
-    
-    async def handle_remove_id_input(self, message: Message, state: FSMContext):
-        data = await state.get_data()
-        action = data.get("action")
-        
+                await message.answer(MSG_USER_ADDED_NOT_NOTIFIED.format(user_id=user_id), reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
+        else:
+            await message.answer(MSG_USER_EXISTS.format(user_id=user_id), reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
+
+    async def handle_remove_id(self, message: Message, state: FSMContext):
+        if not is_admin(message.from_user.id):
+            await state.clear()
+            return
         try:
             user_id = int(message.text.strip())
         except ValueError:
-            await message.answer(
-                "❌ Noto'g'ri format!\n\nFaqat raqam yuboring.",
-                reply_markup=get_cancel_keyboard()
-            )
+            await message.answer(MSG_INVALID_ID, parse_mode=ParseMode.HTML)
             return
-        
         await state.clear()
-        
-        if action == "remove_subscriber":
-            success = BotConfigStorage.remove_subscriber(user_id)
-            if success:
-                await message.answer(
-                    f"✅ Subscriber o'chirildi!\n\nID: <code>{user_id}</code>",
-                    reply_markup=get_main_keyboard(True)
-                )
-            else:
-                await message.answer(
-                    f"❌ Bu ID subscriber emas.\n\nID: <code>{user_id}</code>",
-                    reply_markup=get_main_keyboard(True)
-                )
-        
-        elif action == "remove_admin":
-            if user_id == message.from_user.id:
-                await message.answer(
-                    "❌ O'zingizni o'chira olmaysiz!",
-                    reply_markup=get_main_keyboard(True)
-                )
-                return
-            
-            success = BotConfigStorage.remove_admin(user_id)
-            if success:
-                await message.answer(
-                    f"✅ Admin o'chirildi!\n\nID: <code>{user_id}</code>",
-                    reply_markup=get_main_keyboard(True)
-                )
-            else:
-                await message.answer(
-                    f"❌ Bu ID admin emas.\n\nID: <code>{user_id}</code>",
-                    reply_markup=get_main_keyboard(True)
-                )
-    
+        success = remove_user(user_id)
+        if success:
+            await message.answer(MSG_USER_REMOVED.format(user_id=user_id), reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
+        else:
+            await message.answer(MSG_USER_NOT_FOUND.format(user_id=user_id), reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
 
-    async def send_to_subscribers(self, message: str, sticker_id: str = None) -> Dict:
-        subscribers = BotConfigStorage.get_subscriber_ids()
-        
-        if not subscribers:
-            return {"success": False, "message": "No subscribers"}
-        
+    async def handle_unknown(self, message: Message):
+        if not message.text:
+            return
+        if not message.from_user:
+            return
+        if message.from_user.is_bot:
+            return
+        user_id = message.from_user.id
+        if is_admin(user_id):
+            await message.answer(MSG_UNKNOWN_COMMAND, reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
+            return
+
+    async def send_to_all(self, text: str, sticker_id: str = None) -> Dict:
+        chat_ids = get_all_chat_ids()
+        if not chat_ids:
+            return {"success": False, "sent": 0, "failed": 0}
         sent = 0
         failed = 0
-        
-        for chat_id in subscribers:
+        for chat_id in chat_ids:
             try:
                 if sticker_id:
                     await self.bot.send_sticker(chat_id, sticker_id)
-                await self.bot.send_message(chat_id, message)
+                await self.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
                 sent += 1
             except Exception as e:
                 logger.warning(f"Failed to send to {chat_id}: {e}")
                 failed += 1
-        
-        if failed == len(subscribers):
-            PendingMessageQueue.add(subscribers, message, sticker_id)
-            return {"success": False, "message": "All failed, queued"}
-        
-        return {
-            "success": True,
-            "sent": sent,
-            "failed": failed
-        }
-    
-    async def process_pending_messages(self) -> tuple[int, int]:
-        pending = PendingMessageQueue.get_all()
-        
-        if not pending:
-            return 0, 0
-        
-        sent = 0
-        
-        for item in pending:
-            try:
-                for chat_id in item['chat_ids']:
-                    if item.get('sticker_id'):
-                        await self.bot.send_sticker(chat_id, item['sticker_id'])
-                    await self.bot.send_message(chat_id, item['message'])
-                sent += 1
-            except:
-                break
-        
-        if sent > 0:
-            PendingMessageQueue.remove_first(sent)
-        
-        return sent, len(pending) - sent
+        return {"success": sent > 0, "sent": sent, "failed": failed}
 
     async def start(self):
         logger.info("Starting Smart Jowi Bot...")
-        await self.dp.start_polling(self.bot)
-    
+        try:
+            await self.dp.start_polling(self.bot)
+        except Exception as e:
+            logger.error(f"Bot error: {e}")
+
     async def stop(self):
         await self.bot.session.close()
 
+
 def get_chat_ids() -> List[int]:
-    return BotConfigStorage.get_subscriber_ids()
+    return get_all_chat_ids()
 
 
 def is_notification_enabled(notification_type: str) -> bool:
-    settings = BotConfigStorage.get_settings()
-    key = f"notify_{notification_type}"
-    return settings.get(key, True)
+    return True
