@@ -1,1 +1,1 @@
-{"is_online": false, "last_error": "Cannot reach cloud server", "updated_at": "2026-01-24T18:14:25.718826+00:00"}
+{"is_online": true, "last_error": "main.order: HTTP 403: {\n  \"status\": \"\\ud83d\\udeab Access forbidden\",\n  \"status_code\": 403,\n  \"success\": false,\n  \"meta\": {\n    \"path\": \"/receive\",\n    \"method\": \"POST\",\n    \"timestamp\": \"2026-01-25T19:06:48.195414Z\"\n  }\n}", "updated_at": "2026-01-25T19:06:49.661095+00:00", "last_sync": "2026-01-25T19:06:49.660778+00:00"}
