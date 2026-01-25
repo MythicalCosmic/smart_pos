@@ -41,11 +41,11 @@ class SyncReceiveView(APIView):
         print(f"Data: {request.data}")
         print("="*50)
         
-        if getattr(settings, 'DEPLOYMENT_MODE', '') != 'cloud':
-            return Response(
-                {'error': 'Sync receive only available on cloud server'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # if getattr(settings, 'DEPLOYMENT_MODE', '') != 'cloud':
+        #     return Response(
+        #         {'error': 'Sync receive only available on cloud server'},
+        #         status=status.HTTP_403_FORBIDDEN
+        #     )
         auth_header = request.headers.get('Authorization', '')
         if not auth_header.startswith('Branch '):
             return Response(
