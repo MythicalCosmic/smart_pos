@@ -1,1 +1,1 @@
-{"is_online": true, "last_error": "main.order: HTTP 403: {\"error\":\"Sync receive only available on cloud server\"}", "updated_at": "2026-01-25T19:20:37.287687+00:00", "last_sync": "2026-01-25T19:20:37.286852+00:00"}
+{"is_online": true, "last_error": "main.order: HTTP 403: {\"error\":\"Branch not authorized\"}", "updated_at": "2026-01-25T19:24:57.951858+00:00", "last_sync": "2026-01-25T19:24:57.951522+00:00"}

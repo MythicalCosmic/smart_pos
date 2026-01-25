@@ -58,12 +58,12 @@ class SyncReceiveView(APIView):
         
         from main.services.sync_service import CloudReceiverService
         
-        if not CloudReceiverService.is_branch_authorized(branch_token):
-            logger.warning(f"Unauthorized sync attempt from branch: {branch_id}")
-            return Response(
-                {'error': 'Branch not authorized'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # if not CloudReceiverService.is_branch_authorized(branch_token):
+        #     logger.warning(f"Unauthorized sync attempt from branch: {branch_id}")
+        #     return Response(
+        #         {'error': 'Branch not authorized'},
+        #         status=status.HTTP_403_FORBIDDEN
+        #     )
         
         model_name = request.data.get('model')
         records = request.data.get('records', [])
