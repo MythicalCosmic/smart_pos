@@ -34,18 +34,6 @@ class SyncReceiveView(APIView):
     permission_classes = []
     
     def post(self, request):
-        # DEBUG - see what's coming in
-        print("="*50)
-        print("RECEIVED SYNC REQUEST:")
-        print(f"Headers: {dict(request.headers)}")
-        print(f"Data: {request.data}")
-        print("="*50)
-        
-        # if getattr(settings, 'DEPLOYMENT_MODE', '') != 'cloud':
-        #     return Response(
-        #         {'error': 'Sync receive only available on cloud server'},
-        #         status=status.HTTP_403_FORBIDDEN
-        #     )
         auth_header = request.headers.get('Authorization', '')
         if not auth_header.startswith('Branch '):
             return Response(
@@ -53,20 +41,23 @@ class SyncReceiveView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
         
-        branch_token = auth_header[7:]
         branch_id = request.headers.get('X-Branch-ID', 'unknown')
         
         from main.services.sync_service import CloudReceiverService
         
-        # if not CloudReceiverService.is_branch_authorized(branch_token):
-        #     logger.warning(f"Unauthorized sync attempt from branch: {branch_id}")
-        #     return Response(
-        #         {'error': 'Branch not authorized'},
-        #         status=status.HTTP_403_FORBIDDEN
-        #     )
+        data = request.data
         
-        model_name = request.data.get('model')
-        records = request.data.get('records', [])
+        if isinstance(data, list):
+            if len(data) == 0:
+                return Response(
+                    {'error': 'Empty records list'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            model_name = data[0].get('model_name', 'main.order')
+            records = [item.get('data', item) for item in data]
+        else:
+            model_name = data.get('model')
+            records = data.get('records', [])
         
         if not model_name or not records:
             return Response(
@@ -76,16 +67,10 @@ class SyncReceiveView(APIView):
         
         result = CloudReceiverService.receive_batch(model_name, branch_id, records)
         
-        # ADD THIS DEBUG:
-        print("="*50)
-        print(f"RECEIVE RESULT: {result}")
-        print("="*50)
-        
         logger.info(f"Sync received from {branch_id}: {model_name} - "
                 f"created={result['created']}, updated={result['updated']}")
         
         return Response(result)
-
 
 
 class SyncStatusView(APIView):    
@@ -172,6 +157,8 @@ class SyncQueueView(APIView):
             'success': True,
             'message': 'Sync queue cleared'
         })
+
+
 def get_sync_urls():
     from django.urls import path
     
