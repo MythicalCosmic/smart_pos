@@ -199,3 +199,7 @@ UNFOLD = {
     },
 }
 
+CSRF_TRUSTED_ORIGINS = [
+    'http://92.246.130.137',
+    'https://92.246.130.137',
+]
