@@ -27,6 +27,7 @@ class DecimalEncoder(json.JSONEncoder):
         if isinstance(obj, uuid_module.UUID):
             return str(obj)
         return super().default(obj)
+
 @dataclass
 class SyncRecord:
     model_name: str
@@ -151,6 +152,7 @@ class SyncQueue:
         with cls._lock:
             cls._write_queue([])
 
+
 class SyncStatusTracker:
     _status_file = Path('data/sync_status.json')
     
@@ -182,6 +184,7 @@ class SyncStatusTracker:
     @classmethod
     def get(cls) -> dict:
         return cls._read()
+
 
 class SyncService:
     SYNCABLE_MODELS = [
@@ -392,6 +395,7 @@ class SyncService:
             summary[r.model_name] += 1
         return dict(summary)
 
+
 class CloudReceiverService:
     @classmethod
     def is_branch_authorized(cls, branch_token: str) -> bool:
@@ -399,7 +403,6 @@ class CloudReceiverService:
         return branch_token in allowed
     
     @classmethod
-    @transaction.atomic
     def receive_batch(cls, model_name: str, branch_id: str, records: List[dict]) -> dict:
         result = {
             'success': True,
@@ -413,15 +416,17 @@ class CloudReceiverService:
             app_label, model = model_name.lower().split('.')
             ModelClass = apps.get_model(app_label, model)
             
-            if not hasattr(ModelClass, 'from_sync_dict'):
-                return {
-                    'success': False,
-                    'error': f'Model {model_name} does not support sync'
-                }
+            print(f"[SYNC] Processing {len(records)} records for {model_name}")
             
             for record_data in records:
                 try:
-                    instance, action = ModelClass.from_sync_dict(record_data, branch_id)
+                    record_uuid = record_data.get('uuid')
+                    print(f"[SYNC] Processing record UUID: {record_uuid}")
+                    print(f"[SYNC] Record data: {record_data}")
+                    
+                    instance, action = cls._create_or_update_record(ModelClass, record_data, branch_id)
+                    
+                    print(f"[SYNC] Result: {action} - Instance ID: {instance.id if instance else 'None'}")
                     
                     if action == 'created':
                         result['created'] += 1
@@ -431,37 +436,106 @@ class CloudReceiverService:
                         result['skipped'] += 1
                         
                 except Exception as e:
-                    result['errors'].append(f"Record {record_data.get('uuid', '?')}: {str(e)}")
-            
-            if getattr(settings, 'REALTIME_UPDATES_ENABLED', False):
-                cls._broadcast_update(model_name, branch_id, result)
+                    import traceback
+                    error_msg = f"Record {record_data.get('uuid', '?')}: {str(e)}"
+                    print(f"[SYNC ERROR] {error_msg}")
+                    print(f"[SYNC ERROR] Traceback: {traceback.format_exc()}")
+                    result['errors'].append(error_msg)
             
         except Exception as e:
+            import traceback
             result['success'] = False
             result['errors'].append(str(e))
+            print(f"[SYNC ERROR] Batch error: {str(e)}")
+            print(f"[SYNC ERROR] Traceback: {traceback.format_exc()}")
         
+        print(f"[SYNC] Final result: {result}")
         return result
     
     @classmethod
-    def _broadcast_update(cls, model_name: str, branch_id: str, result: dict):
-        try:
-            from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
+    def _create_or_update_record(cls, ModelClass, data: dict, branch_id: str):
+        from django.utils import timezone
+        from decimal import Decimal
+        from dateutil import parser as date_parser
+        
+        data = data.copy()
+        
+        uuid_val = data.pop('uuid', None)
+        if not uuid_val:
+            raise ValueError("Record missing UUID")
+        
+        sync_version = data.pop('sync_version', 1)
+        is_deleted = data.pop('is_deleted', False)
+        incoming_branch = data.pop('branch_id', branch_id)
+        
+        data.pop('user_uuid', None)
+        data.pop('cashier_uuid', None)
+        data.pop('delivery_person_uuid', None)
+        data.pop('category_uuid', None)
+        data.pop('order_uuid', None)
+        data.pop('product_uuid', None)
+        
+        model_fields = {f.name for f in ModelClass._meta.get_fields() if hasattr(f, 'column')}
+        
+        cleaned_data = {}
+        for key, value in data.items():
+            if key not in model_fields:
+                continue
+                
+            if value is None:
+                cleaned_data[key] = value
+                continue
             
-            channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                'sync_updates',
-                {
-                    'type': 'sync_update',
-                    'model': model_name,
-                    'branch_id': branch_id,
-                    'created': result['created'],
-                    'updated': result['updated'],
-                    'timestamp': timezone.now().isoformat()
-                }
+            try:
+                field = ModelClass._meta.get_field(key)
+                
+                if field.get_internal_type() == 'DecimalField':
+                    cleaned_data[key] = Decimal(str(value)) if value else Decimal('0')
+                elif field.get_internal_type() in ('DateTimeField', 'DateField'):
+                    if isinstance(value, str) and value:
+                        cleaned_data[key] = date_parser.parse(value)
+                    else:
+                        cleaned_data[key] = value
+                elif field.get_internal_type() == 'ForeignKey':
+                    continue
+                else:
+                    cleaned_data[key] = value
+            except Exception as e:
+                print(f"[SYNC] Warning: Could not process field {key}: {e}")
+                cleaned_data[key] = value
+        
+        try:
+            instance = ModelClass.objects.get(uuid=uuid_val)
+            
+            if sync_version >= instance.sync_version:
+                for key, value in cleaned_data.items():
+                    setattr(instance, key, value)
+                instance.sync_version = sync_version
+                instance.is_deleted = is_deleted
+                instance.synced_at = timezone.now()
+                instance.branch_id = incoming_branch
+                instance.save()
+                return instance, 'updated'
+            else:
+                return instance, 'skipped'
+            
+        except ModelClass.DoesNotExist:
+            instance = ModelClass(
+                uuid=uuid_val,
+                sync_version=sync_version,
+                is_deleted=is_deleted,
+                branch_id=incoming_branch,
             )
-        except Exception as e:
-            logger.warning(f"Failed to broadcast sync update: {e}")
+            for key, value in cleaned_data.items():
+                setattr(instance, key, value)
+            
+            instance.save()
+            return instance, 'created'
+    
+    @classmethod
+    def _broadcast_update(cls, model_name: str, branch_id: str, result: dict):
+        pass
+
 
 class SyncWorker:
     _running = False
@@ -501,6 +575,7 @@ class SyncWorker:
             except Exception as e:
                 logger.exception("Error in sync loop")
                 time.sleep(retry_interval)
+
 
 def start_sync_worker_on_ready():
     if SyncService.is_enabled() and SyncService.is_local_mode():
