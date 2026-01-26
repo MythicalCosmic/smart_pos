@@ -397,6 +397,15 @@ class SyncService:
 
 
 class CloudReceiverService:
+    FK_UUID_MAPPINGS = {
+        'user_uuid': ('main', 'user', 'user'),
+        'cashier_uuid': ('main', 'user', 'cashier'),
+        'delivery_person_uuid': ('main', 'deliveryperson', 'delivery_person'),
+        'category_uuid': ('main', 'category', 'category'),
+        'order_uuid': ('main', 'order', 'order'),
+        'product_uuid': ('main', 'product', 'product'),
+    }
+    
     @classmethod
     def is_branch_authorized(cls, branch_token: str) -> bool:
         allowed = getattr(settings, 'ALLOWED_BRANCH_TOKENS', [])
@@ -422,7 +431,6 @@ class CloudReceiverService:
                 try:
                     record_uuid = record_data.get('uuid')
                     print(f"[SYNC] Processing record UUID: {record_uuid}")
-                    print(f"[SYNC] Record data: {record_data}")
                     
                     instance, action = cls._create_or_update_record(ModelClass, record_data, branch_id)
                     
@@ -453,6 +461,26 @@ class CloudReceiverService:
         return result
     
     @classmethod
+    def _resolve_foreign_keys(cls, data: dict) -> dict:
+        resolved = {}
+        
+        for uuid_field, (app_label, model_name, fk_field) in cls.FK_UUID_MAPPINGS.items():
+            uuid_value = data.get(uuid_field)
+            if uuid_value:
+                try:
+                    RelatedModel = apps.get_model(app_label, model_name)
+                    related_instance = RelatedModel.objects.filter(uuid=uuid_value).first()
+                    if related_instance:
+                        resolved[fk_field] = related_instance
+                        print(f"[SYNC] Resolved {uuid_field} -> {fk_field} = {related_instance.id}")
+                    else:
+                        print(f"[SYNC] Warning: Could not find {model_name} with UUID {uuid_value}")
+                except Exception as e:
+                    print(f"[SYNC] Error resolving {uuid_field}: {e}")
+        
+        return resolved
+    
+    @classmethod
     def _create_or_update_record(cls, ModelClass, data: dict, branch_id: str):
         from django.utils import timezone
         from decimal import Decimal
@@ -468,14 +496,15 @@ class CloudReceiverService:
         is_deleted = data.pop('is_deleted', False)
         incoming_branch = data.pop('branch_id', branch_id)
         
-        data.pop('user_uuid', None)
-        data.pop('cashier_uuid', None)
-        data.pop('delivery_person_uuid', None)
-        data.pop('category_uuid', None)
-        data.pop('order_uuid', None)
-        data.pop('product_uuid', None)
+        resolved_fks = cls._resolve_foreign_keys(data)
         
-        model_fields = {f.name for f in ModelClass._meta.get_fields() if hasattr(f, 'column')}
+        for uuid_field in cls.FK_UUID_MAPPINGS.keys():
+            data.pop(uuid_field, None)
+        
+        model_fields = {}
+        for f in ModelClass._meta.get_fields():
+            if hasattr(f, 'column'):
+                model_fields[f.name] = f
         
         cleaned_data = {}
         for key, value in data.items():
@@ -487,17 +516,22 @@ class CloudReceiverService:
                 continue
             
             try:
-                field = ModelClass._meta.get_field(key)
+                field = model_fields[key]
+                field_type = field.get_internal_type()
                 
-                if field.get_internal_type() == 'DecimalField':
+                if field_type == 'DecimalField':
                     cleaned_data[key] = Decimal(str(value)) if value else Decimal('0')
-                elif field.get_internal_type() in ('DateTimeField', 'DateField'):
+                elif field_type in ('DateTimeField', 'DateField'):
                     if isinstance(value, str) and value:
                         cleaned_data[key] = date_parser.parse(value)
                     else:
                         cleaned_data[key] = value
-                elif field.get_internal_type() == 'ForeignKey':
+                elif field_type == 'ForeignKey':
                     continue
+                elif field_type == 'BooleanField':
+                    cleaned_data[key] = bool(value)
+                elif field_type == 'IntegerField' or field_type == 'PositiveIntegerField':
+                    cleaned_data[key] = int(value) if value is not None else None
                 else:
                     cleaned_data[key] = value
             except Exception as e:
@@ -510,6 +544,10 @@ class CloudReceiverService:
             if sync_version >= instance.sync_version:
                 for key, value in cleaned_data.items():
                     setattr(instance, key, value)
+                
+                for fk_field, fk_instance in resolved_fks.items():
+                    setattr(instance, fk_field, fk_instance)
+                
                 instance.sync_version = sync_version
                 instance.is_deleted = is_deleted
                 instance.synced_at = timezone.now()
@@ -526,8 +564,12 @@ class CloudReceiverService:
                 is_deleted=is_deleted,
                 branch_id=incoming_branch,
             )
+            
             for key, value in cleaned_data.items():
                 setattr(instance, key, value)
+            
+            for fk_field, fk_instance in resolved_fks.items():
+                setattr(instance, fk_field, fk_instance)
             
             instance.save()
             return instance, 'created'
