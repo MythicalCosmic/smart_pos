@@ -65,43 +65,6 @@ REALTIME_UPDATES_ENABLED = True
 STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
 
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '[{asctime}] {levelname} {name}: {message}',
-            'style': '{',
-        },
-        'json': {
-            'class': 'pythonjsonlogger.jsonlogger.JsonFormatter',
-            'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
-        },
-    },
-    'loggers': {
-        'main.services.sync': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'django': {
-            'handlers': ['console'],
-            'level': 'WARNING',
-        },
-        'django.request': {
-            'handlers': ['console'],
-            'level': 'ERROR',
-            'propagate': False,
-        },
-    },
-}
-
 REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
