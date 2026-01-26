@@ -54,11 +54,10 @@ class OrderService:
     
     @staticmethod
     def _check_cashier_ownership(order, cashier_id):
-
         if order.cashier_id and order.cashier_id != cashier_id:
             return {
                 'success': False,
-                'message': f'Sizda bu buyurtmani o\'zgartirish huquqi yo\'q. Buyurtma #{order.display_id} boshqa kassir tomonidan yaratilgan.'
+                'message': f'You do not have permission to modify this order. Order #{order.display_id} was created by another cashier.'
             }
         return None
     
@@ -301,7 +300,6 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
             
-            # Check cashier ownership
             ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
             if ownership_error:
                 return ownership_error
@@ -338,7 +336,6 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
             
-            # Check cashier ownership
             ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
             if ownership_error:
                 return ownership_error
@@ -363,7 +360,6 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
             
-            # Check cashier ownership
             ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
             if ownership_error:
                 return ownership_error
@@ -392,7 +388,6 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
             
-            # Check cashier ownership
             ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
             if ownership_error:
                 return ownership_error
@@ -430,7 +425,6 @@ class OrderService:
         try:
             order = Order.objects.select_related('cashier').prefetch_related('items__product').get(id=order_id)
             
-            # Check cashier ownership
             ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
             if ownership_error:
                 return ownership_error
@@ -502,7 +496,6 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
             
-            # Check cashier ownership
             ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
             if ownership_error:
                 return ownership_error
@@ -545,7 +538,6 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
             
-            # Check cashier ownership
             ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
             if ownership_error:
                 return ownership_error
@@ -571,7 +563,6 @@ class OrderService:
         try:
             order = Order.objects.get(id=order_id)
             
-            # Check cashier ownership
             ownership_error = OrderService._check_cashier_ownership(order, cashier_id)
             if ownership_error:
                 return ownership_error
