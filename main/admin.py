@@ -5,10 +5,10 @@ from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
 from django import forms
 from django.contrib.auth.hashers import make_password
+from django.utils.text import slugify
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import display
 
-#EDUT
 from unfold.contrib.filters.admin import (
     RangeDateFilter,
     RangeDateTimeFilter,
@@ -239,6 +239,24 @@ class MultiColorWidget(forms.Widget):
         return data.get(name, '')
 
 
+def generate_unique_slug(model_class, name, instance=None):
+    base_slug = slugify(name, allow_unicode=True)
+    if not base_slug:
+        base_slug = 'item'
+    
+    slug = base_slug
+    counter = 1
+    
+    while True:
+        qs = model_class.objects.filter(slug=slug)
+        if instance and instance.pk:
+            qs = qs.exclude(pk=instance.pk)
+        if not qs.exists():
+            return slug
+        slug = f"{base_slug}-{counter}"
+        counter += 1
+
+
 class CategoryAdminForm(forms.ModelForm):
     colors_input = forms.CharField(
         required=False,
@@ -252,6 +270,8 @@ class CategoryAdminForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['slug'].required = False
+        self.fields['slug'].help_text = _("Leave blank to auto-generate from name")
         if self.instance and self.instance.pk and self.instance.colors:
             self.fields['colors_input'].initial = ', '.join(self.instance.colors)
     
@@ -269,8 +289,18 @@ class CategoryAdminForm(forms.ModelForm):
                 if len(color) in [4, 7] and all(c in '0123456789abcdefABCDEF#' for c in color):
                     colors.append(color.lower())
                 else:
-                    raise forms.ValidationError(f"Noto'g'ri rang formati: {color}")
+                    raise forms.ValidationError(f"Invalid color format: {color}")
         return colors
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        name = cleaned_data.get('name')
+        slug = cleaned_data.get('slug')
+        
+        if name and not slug:
+            cleaned_data['slug'] = generate_unique_slug(Category, name, self.instance)
+        
+        return cleaned_data
     
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -289,19 +319,19 @@ class CategoryAdmin(ModelAdmin):
     list_filter_submit = True
     
     fieldsets = (
-        (_('Asosiy ma\'lumotlar'), {
+        (_('Basic Information'), {
             'fields': ('name', 'slug', 'description')
         }),
-        (_('Ranglar'), {
+        (_('Colors'), {
             'fields': ('colors_input',),
-            'description': _("Kategoriya uchun bir yoki bir nechta rang tanlang")
+            'description': _("Select one or more colors for this category")
         }),
-        (_('Sozlamalar'), {
+        (_('Settings'), {
             'fields': ('status', 'sort_order')
         }),
     )
     
-    @display(description=_("Ranglar"))
+    @display(description=_("Colors"))
     def color_bars(self, obj):
         if not obj.colors:
             return mark_safe('<span style="color: #999;">—</span>')
@@ -323,7 +353,7 @@ class CategoryAdmin(ModelAdmin):
             return 'success', obj.get_status_display()
         return 'warning', obj.get_status_display()
     
-    @display(description=_("Mahsulotlar"))
+    @display(description=_("Products"))
     def product_count(self, obj):
         return obj.products.count()
 
@@ -331,8 +361,8 @@ class CategoryAdmin(ModelAdmin):
 class ProductAdminForm(forms.ModelForm):
     colors_input = forms.CharField(
         required=False,
-        label=_("Ranglar"),
-        help_text=_("Mahsulot uchun bir yoki bir nechta rang tanlang"),
+        label=_("Colors"),
+        help_text=_("Select one or more colors for this product"),
         widget=MultiColorWidget()
     )
     
@@ -359,7 +389,7 @@ class ProductAdminForm(forms.ModelForm):
                 if len(color) in [4, 7] and all(c in '0123456789abcdefABCDEF#' for c in color):
                     colors.append(color.lower())
                 else:
-                    raise forms.ValidationError(f"Noto'g'ri rang formati: {color}")
+                    raise forms.ValidationError(f"Invalid color format: {color}")
         return colors
     
     def save(self, commit=True):
@@ -383,16 +413,16 @@ class ProductAdmin(ModelAdmin):
         (_('Product Information'), {
             'fields': ('name', 'description', 'category')
         }),
-        (_('Ranglar'), {
+        (_('Colors'), {
             'fields': ('colors_input',),
-            'description': _("Mahsulot uchun bir yoki bir nechta rang tanlang")
+            'description': _("Select one or more colors for this product")
         }),
         (_('Pricing'), {
             'fields': ('price',)
         }),
     )
     
-    @display(description=_("Ranglar"))
+    @display(description=_("Colors"))
     def color_bars(self, obj):
         if not obj.colors:
             return mark_safe('<span style="color: #999;">—</span>')
@@ -556,4 +586,3 @@ class InkassaAdmin(ModelAdmin):
             hours = int(duration.total_seconds() // 3600)
             return f"{hours}h"
         return "-"
-    
