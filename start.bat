@@ -52,6 +52,7 @@ echo.
 
 timeout /t 3 /nobreak >nul
 
-powershell -ExecutionPolicy Bypass -Command "Add-Type @'`nusing System;`nusing System.Runtime.InteropServices;`npublic class W{[DllImport(\"user32.dll\")]public static extern bool ShowWindow(IntPtr h,int c);[DllImport(\"kernel32.dll\")]public static extern IntPtr GetConsoleWindow();}`n'@;[W]::ShowWindow([W]::GetConsoleWindow(),6)|Out-Null"
+powershell -NoProfile -ExecutionPolicy Bypass -File hide_console.ps1
+
 
 python manage.py runserver 0.0.0.0:8000 --nothreading

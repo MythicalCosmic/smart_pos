@@ -1,3 +1,5 @@
+# main/views/order_views.py
+
 from django.views.decorators.csrf import csrf_exempt
 from ..services.order_service import OrderService
 from main.helpers.response import APIResponse
@@ -64,8 +66,6 @@ def create_order(request):
     description = data.get('description')
     details = [item.get('detail') for item in items if 'detail' in item]
     delivery_person_id = data.get('delivery_person_id')
-
-
     
     if not items or len(items) == 0:
         return APIResponse.validation_error(
@@ -78,13 +78,6 @@ def create_order(request):
             errors={'order_type': 'Must be HALL, DELIVERY, or PICKUP'},
             message='Invalid order type'
         )
-    
-    # if order_type == 'DELIVERY' and not delivery_person_id:
-    #    if not delivery_person_id:
-    #         return APIResponse.validation_error(
-    #             errors={'delivery_person_id': 'Delivery person ID is required for delivery orders'},
-    #          message='Delivery Person ID required for delivery'
-    #         )
     
     for idx, item in enumerate(items):
         if 'product_id' not in item:
@@ -105,7 +98,7 @@ def create_order(request):
         phone_number=phone_number,
         description=description,
         detail=[details[idx] for idx in range(len(details))] if details else None,
-        cashier_id=cashier_id,\
+        cashier_id=cashier_id,
         delivery_person_id=delivery_person_id
     )
     
@@ -144,7 +137,9 @@ def add_item(request, order_id):
             message='Invalid quantity'
         )
     
-    result = OrderService.add_item_to_order(order_id, product_id, quantity)
+    # FIX: Pass cashier_id
+    cashier_id = request.user.id if request.user.role == 'CASHIER' else None
+    result = OrderService.add_item_to_order(order_id, product_id, quantity, cashier_id=cashier_id)
     
     if result['success']:
         return APIResponse.success(message=result['message'])
@@ -168,7 +163,9 @@ def update_item(request, order_id, item_id):
             message='Invalid quantity'
         )
     
-    result = OrderService.update_order_item(order_id, item_id, quantity)
+    # FIX: Pass cashier_id
+    cashier_id = request.user.id if request.user.role == 'CASHIER' else None
+    result = OrderService.update_order_item(order_id, item_id, quantity, cashier_id=cashier_id)
     
     if result['success']:
         return APIResponse.success(message=result['message'])
@@ -180,7 +177,9 @@ def update_item(request, order_id, item_id):
 @api_view(["DELETE"])
 @user_required
 def remove_item(request, order_id, item_id):
-    result = OrderService.remove_item_from_order(order_id, item_id)
+    # FIX: Pass cashier_id
+    cashier_id = request.user.id if request.user.role == 'CASHIER' else None
+    result = OrderService.remove_item_from_order(order_id, item_id, cashier_id=cashier_id)
     
     if result['success']:
         return APIResponse.success(message=result['message'])
@@ -223,7 +222,7 @@ def update_status(request, order_id):
 @user_required
 def pay_order(request, order_id):
     user = request.user
-    
+    # FIX: Pass user.id directly (already correct, but ensure role check isn't blocking)
     result = OrderService.mark_as_paid(order_id, user.id)
     
     if result['success']:
@@ -239,7 +238,9 @@ def pay_order(request, order_id):
 @api_view(["POST"])
 @user_required
 def mark_ready(request, order_id):
-    result = OrderService.mark_order_ready(order_id)
+    # FIX: Pass cashier_id
+    cashier_id = request.user.id if request.user.role == 'CASHIER' else None
+    result = OrderService.mark_order_ready(order_id, cashier_id=cashier_id)
     
     if result['success']:
         return APIResponse.success(
@@ -259,7 +260,9 @@ def mark_ready(request, order_id):
 @api_view(["POST"])
 @user_required
 def mark_item_ready(request, order_id, item_id):
-    result = OrderService.mark_item_ready(order_id, item_id)
+    # FIX: Pass cashier_id
+    cashier_id = request.user.id if request.user.role == 'CASHIER' else None
+    result = OrderService.mark_item_ready(order_id, item_id, cashier_id=cashier_id)
     
     if result['success']:
         return APIResponse.success(
@@ -278,7 +281,9 @@ def mark_item_ready(request, order_id, item_id):
 @api_view(["POST"])
 @user_required
 def unmark_item_ready(request, order_id, item_id):
-    result = OrderService.unmark_item_ready(order_id, item_id)
+    # FIX: Pass cashier_id
+    cashier_id = request.user.id if request.user.role == 'CASHIER' else None
+    result = OrderService.unmark_item_ready(order_id, item_id, cashier_id=cashier_id)
     
     if result['success']:
         return APIResponse.success(
@@ -296,7 +301,9 @@ def unmark_item_ready(request, order_id, item_id):
 @api_view(["POST"])
 @user_required
 def cancel_order(request, order_id):
-    result = OrderService.update_order_status(order_id, 'CANCELLED')
+    # FIX: Pass cashier_id
+    cashier_id = request.user.id if request.user.role == 'CASHIER' else None
+    result = OrderService.update_order_status(order_id, 'CANCELLED', cashier_id)
     
     if result['success']:
         return APIResponse.success(message='Order cancelled successfully')

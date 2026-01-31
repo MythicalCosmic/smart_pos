@@ -129,8 +129,12 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
+from dotenv import load_dotenv
+import os
 
-BOT_TOKEN = "8170384586:AAGX4nKThV-X9xjGTZqgU5t4BrqkrFzPPCc"
+load_dotenv(override=True)  
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 CHAT_IDS = [
     6589960007,
