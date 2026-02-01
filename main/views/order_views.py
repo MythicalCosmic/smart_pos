@@ -1,5 +1,3 @@
-# main/views/order_views.py
-
 from django.views.decorators.csrf import csrf_exempt
 from ..services.order_service import OrderService
 from main.helpers.response import APIResponse
