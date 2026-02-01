@@ -2,8 +2,8 @@
 
 > Enterprise-grade restaurant management backend with service-oriented architecture, multi-branch support, and real-time cloud synchronization
 
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
-![Django](https://img.shields.io/badge/Django-4.x-092E20?logo=django&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.13+-3776AB?logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-5.x-092E20?logo=django&logoColor=white)
 ![DRF](https://img.shields.io/badge/DRF-3.x-ff1709?logo=django&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
