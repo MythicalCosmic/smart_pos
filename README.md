@@ -115,7 +115,7 @@ Smart POS follows a **service-oriented architecture** with clear separation betw
 
 | Layer | Technology |
 |-------|------------|
-| **Framework** | Django 4.x |
+| **Framework** | Django 5.x |
 | **API** | Django REST Framework |
 | **Database** | SQLite (local) / PostgreSQL (cloud) |
 | **Async** | ASGI with `asgi.py` |
