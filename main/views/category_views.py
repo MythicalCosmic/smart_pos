@@ -17,13 +17,15 @@ def list_categories(request):
     search = request.GET.get('search')
     status = request.GET.get('status')
     order_by = request.GET.get('order_by', 'sort_order')
+    include_deleted = request.GET.get('include_deleted', False)
     
     result = CategoryService.get_all_categories(
         page=page,
         per_page=per_page,
         search=search,
         status=status,
-        order_by=order_by
+        order_by=order_by,
+        include_deleted=include_deleted
     )
     
     return APIResponse.success(data=result)
@@ -103,6 +105,17 @@ def delete_category(request, category_id):
     return APIResponse.not_found(message=result['message'])
 
 
+
+@csrf_exempt
+@api_view(["POST"])
+@user_required
+def restore_deleted_category(request, category_id):
+    result = CategoryService.restore_category(category_id)
+    if result['success']:
+        return APIResponse.success(message=result['message'])
+    
+    return APIResponse.not_found(message=result['message'])
+
 @csrf_exempt
 @api_view(["PATCH"])
 @user_required
@@ -124,6 +137,7 @@ def update_category_status(request, category_id):
         return APIResponse.success(message=result['message'])
     
     return APIResponse.error(message=result['message'])
+
 
 
 @csrf_exempt

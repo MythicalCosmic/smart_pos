@@ -18,6 +18,7 @@ urlpatterns = [
     path('categories/create', category_views.create_category, name='create_category'),
     path('categories/<int:category_id>/update', category_views.update_category, name='update_category'),
     path('categories/<int:category_id>/delete', category_views.delete_category, name='delete_category'),
+    path('categories/<int:category_id>/restore', category_views.restore_deleted_category, name='restore-category'),
     path('categories/<int:category_id>/status', category_views.update_category_status, name='update_category_status'),
     path('categories/reorder', category_views.reorder_categories, name='reorder_categories'),
     path('categories/stats', category_views.get_stats, name='get_category_stats'),
