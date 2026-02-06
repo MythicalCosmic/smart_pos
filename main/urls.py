@@ -1,5 +1,5 @@
 from django.urls import path, include
-from main.views import auth_views, category_views, product_views, user_views, order_views, inkassa_views
+from main.views import auth_views, category_views, product_views, user_views, order_views, inkassa_views, role_views
 from main.views.sync_views import *
 
 
@@ -23,14 +23,36 @@ urlpatterns = [
     path('categories/reorder', category_views.reorder_categories, name='reorder_categories'),
     path('categories/stats', category_views.get_stats, name='get_category_stats'),
 
-    path('users', user_views.list_users, name='list_users'),
-    path('users/<int:user_id>', user_views.get_user, name='get_user'),
-    path('users/create', user_views.create_user, name='create_user'),
-    path('users/<int:user_id>/update', user_views.update_user, name='update_user'),
-    path('users/<int:user_id>/delete', user_views.delete_user, name='delete_user'),
-    path('users/<int:user_id>/status', user_views.update_user_status, name='update_user_status'),
-    path('users/<int:user_id>/role', user_views.update_user_role, name='update_user_role'),
-    path('stats', user_views.get_stats, name='get_stats'),
+    path('users', user_views.list_users, name='user-list'),
+    path('users/stats', user_views.get_stats, name='user-stats'),
+    path('users/search', user_views.search_users, name='user-search'),
+    path('users/deleted', user_views.get_deleted_users, name='user-deleted'),
+    path('users/cashiers', user_views.get_cashiers, name='user-cashiers'),
+    path('users/admins', user_views.get_admins, name='user-admins'),
+    path('users/check-username', user_views.check_username_available, name='user-check-username'),
+    path('users/preview-username', user_views.preview_username, name='user-preview-username'),
+    path('users/bulk/status', user_views.bulk_update_status, name='user-bulk-status'),
+    path('users/bulk/delete', user_views.bulk_delete, name='user-bulk-delete'),
+    path('isers/bulk/restore', user_views.bulk_restore, name='user-bulk-restore'),
+    path('users/role/<str:role>', user_views.get_users_by_role, name='user-by-role'),
+    path('users/username/<str:username>', user_views.get_user_by_username, name='user-by-username'),
+    path('users/<int:user_id>', user_views.get_user, name='user-detail'),
+    path('users/<int:user_id>/update', user_views.update_user, name='user-update'),
+    path('users/<int:user_id>/delete', user_views.delete_user, name='user-delete'),
+    path('users/<int:user_id>/restore', user_views.restore_user, name='user-restore'),
+    path('users/<int:user_id>/status', user_views.update_user_status, name='user-status'),
+    path('users/<int:user_id>/role', user_views.update_user_role, name='user-role'),
+    path('users/<int:user_id>/change-password', user_views.change_password, name='user-change-password'),
+    path('users/<int:user_id>/reset-password', user_views.reset_password, name='user-reset-password'),
+    path('users/create', user_views.create_user, name='user-create'),
+
+    path('', role_views.list_roles, name='role-list'),
+    path('stats', role_views.get_role_stats, name='role-stats'),
+    path('validate', role_views.validate_role, name='role-validate'),
+    path('<str:role_code>', role_views.get_role, name='role-detail'),
+    path('<str:role_code>/permissions', role_views.get_role_permissions, name='role-permissions'),
+    path('<str:role_code>/manageable', role_views.get_manageable_roles, name='role-manageable'),
+    path('<str:role_code>/check/<str:permission>', role_views.check_permission, name='role-check-permission'),
 
     path('products', product_views.list_products, name='list_products'),
     path('products/<int:product_id>', product_views.get_product, name='get_product'),

@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'stock',
     'corsheaders',
     'rest_framework',
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -52,7 +53,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'main.middleware.JSONOnlyMiddleware',
+    # 'main.middleware.JSONOnlyMiddleware',
 ]
 
 ROOT_URLCONF = 'smart_jowi.urls'
@@ -204,3 +205,36 @@ CSRF_TRUSTED_ORIGINS = [
     'http://92.246.130.137',
     'https://92.246.130.137',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',  
+    ],
+
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
+}
+
+
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Smart POS',
+    'DESCRIPTION': 'Smart POS API documentation',
+    'VERSION': '1.0.0',
+
+    'SECURITY': [{'bearerAuth': []}],
+
+    'COMPONENTS': {
+        'securitySchemes': {
+            'bearerAuth': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+            }
+        }
+    },
+}
