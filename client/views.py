@@ -108,3 +108,9 @@ def chef_mark_ready(request, order_id):
     
     except Order.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Order not found'}, status=404)
+    
+def return_teapot(request):
+    return JsonResponse(
+    {"detail": "I'm a teapot"},
+    status=418
+)
