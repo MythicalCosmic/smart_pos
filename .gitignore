@@ -27,3 +27,4 @@ logger/logs.txt
 .db_cloud.sqlite3
 .data/*
 /data
+license.lock
