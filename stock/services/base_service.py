@@ -1,6 +1,3 @@
-"""
-Base Service - Common utilities for all stock services
-"""
 from typing import Dict, Any, Optional, List, Tuple
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date, timedelta
@@ -11,7 +8,6 @@ import uuid
 
 
 class ServiceError(Exception):
-    """Base exception for service errors"""
     def __init__(self, message: str, code: str = "ERROR", details: Dict = None):
         self.message = message
         self.code = code
@@ -20,14 +16,12 @@ class ServiceError(Exception):
 
 
 class ValidationError(ServiceError):
-    """Validation error"""
     def __init__(self, message: str, field: str = None, details: Dict = None):
         super().__init__(message, "VALIDATION_ERROR", details)
         self.field = field
 
 
 class NotFoundError(ServiceError):
-    """Resource not found error"""
     def __init__(self, resource: str, identifier: Any):
         super().__init__(
             f"{resource} not found: {identifier}",
@@ -37,13 +31,11 @@ class NotFoundError(ServiceError):
 
 
 class BusinessRuleError(ServiceError):
-    """Business rule violation"""
     def __init__(self, message: str, rule: str = None):
         super().__init__(message, "BUSINESS_RULE_VIOLATION", {"rule": rule})
 
 
 class InsufficientStockError(ServiceError):
-    """Not enough stock"""
     def __init__(self, item_name: str, required: Decimal, available: Decimal):
         super().__init__(
             f"Insufficient stock for {item_name}: required {required}, available {available}",
@@ -53,7 +45,6 @@ class InsufficientStockError(ServiceError):
 
 
 def success_response(data: Any = None, message: str = "Success") -> Dict:
-    """Standard success response"""
     response = {"success": True, "message": message}
     if data is not None:
         if isinstance(data, dict):
@@ -64,7 +55,6 @@ def success_response(data: Any = None, message: str = "Success") -> Dict:
 
 
 def error_response(message: str, code: str = "ERROR", details: Dict = None) -> Dict:
-    """Standard error response"""
     return {
         "success": False,
         "message": message,
@@ -74,9 +64,6 @@ def error_response(message: str, code: str = "ERROR", details: Dict = None) -> D
 
 
 def paginate_queryset(queryset, page: int = 1, per_page: int = 20) -> Tuple[List, Dict]:
-    """
-    Paginate a queryset and return items + pagination info
-    """
     page = max(1, page)
     per_page = min(max(1, per_page), 100)
     
@@ -97,7 +84,6 @@ def paginate_queryset(queryset, page: int = 1, per_page: int = 20) -> Tuple[List
 
 
 def to_decimal(value: Any, default: Decimal = Decimal("0")) -> Decimal:
-    """Convert value to Decimal safely"""
     if value is None:
         return default
     try:
@@ -107,7 +93,6 @@ def to_decimal(value: Any, default: Decimal = Decimal("0")) -> Decimal:
 
 
 def round_decimal(value: Decimal, places: int = 4) -> Decimal:
-    """Round decimal to specified places"""
     if value is None:
         return Decimal("0")
     quantize_str = "0." + "0" * places
@@ -115,11 +100,8 @@ def round_decimal(value: Decimal, places: int = 4) -> Decimal:
 
 
 def generate_number(prefix: str, model_class: Model, field: str = "order_number") -> str:
-    """Generate a unique sequential number"""
     today = timezone.now()
     date_part = today.strftime("%Y%m%d")
-    
-    # Find last number for today
     filter_kwargs = {f"{field}__startswith": f"{prefix}-{date_part}"}
     last = model_class.objects.filter(**filter_kwargs).order_by(f"-{field}").first()
     
@@ -136,11 +118,6 @@ def generate_number(prefix: str, model_class: Model, field: str = "order_number"
 
 
 def get_date_range(period: str) -> Tuple[date, date]:
-    """
-    Parse period string to date range
-    Supports: 'today', 'yesterday', 'this_week', 'last_week', 
-              'this_month', 'last_month', 'this_year', 'last_30_days', etc.
-    """
     today = timezone.now().date()
     
     if period == "today":
@@ -170,18 +147,14 @@ def get_date_range(period: str) -> Tuple[date, date]:
         except:
             pass
     
-    # Default to today
     return today, today
 
 
 class BaseService:
-    """Base class for all services"""
-    
     model = None
     
     @classmethod
     def get_by_id(cls, id: int) -> Optional[Model]:
-        """Get single record by ID"""
         try:
             return cls.model.objects.get(id=id)
         except cls.model.DoesNotExist:
@@ -189,7 +162,6 @@ class BaseService:
     
     @classmethod
     def get_by_uuid(cls, uuid_str: str) -> Optional[Model]:
-        """Get single record by UUID"""
         try:
             return cls.model.objects.get(uuid=uuid_str)
         except (cls.model.DoesNotExist, ValueError):
@@ -197,7 +169,6 @@ class BaseService:
     
     @classmethod
     def get_or_404(cls, id: int) -> Model:
-        """Get record or raise NotFoundError"""
         obj = cls.get_by_id(id)
         if not obj:
             raise NotFoundError(cls.model.__name__, id)
@@ -205,12 +176,10 @@ class BaseService:
     
     @classmethod
     def exists(cls, id: int) -> bool:
-        """Check if record exists"""
         return cls.model.objects.filter(id=id).exists()
     
     @classmethod
     def get_active(cls):
-        """Get all active records"""
         if hasattr(cls.model, 'is_active'):
             return cls.model.objects.filter(is_active=True)
         return cls.model.objects.all()

@@ -1,6 +1,3 @@
-"""
-Order Integration Service - Automatic stock deduction on POS order processing
-"""
 from typing import Dict, Any, Optional, List
 from decimal import Decimal
 from django.db import transaction
@@ -18,14 +15,9 @@ from .settings_service import StockSettingsService
 
 
 class OrderStockService:
-    """
-    Handle stock operations triggered by POS orders.
-    This is the main integration point between POS and Stock systems.
-    """
     
     @classmethod
     def should_process_order(cls, order_status: str) -> bool:
-        """Check if stock should be processed at this order status"""
         settings = StockSettings.load()
         
         if not settings.stock_enabled:
@@ -44,29 +36,15 @@ class OrderStockService:
                          location_id: int,
                          user_id: int,
                          order_status: str = None) -> Dict[str, Any]:
-        """
-        Deduct stock for an order.
-        
-        Args:
-            order_id: POS order ID
-            order_items: List of dicts with {product_id, quantity, modifiers: [{component_id, action}]}
-            location_id: Location to deduct from
-            user_id: User performing the action
-            order_status: Current order status (for checking if deduction should happen)
-        
-        Returns:
-            Result with deduction details
-        """
+
         settings = StockSettings.load()
         
-        # Check if stock system is enabled
         if not settings.stock_enabled:
             return success_response({
                 "skipped": True,
                 "reason": "Stock system disabled"
             })
         
-        # Check if we should deduct at this status
         if order_status and order_status != settings.deduct_on_order_status:
             return success_response({
                 "skipped": True,
@@ -93,7 +71,6 @@ class OrderStockService:
                 deductions.extend(result.get("deductions", []))
             except InsufficientStockError as e:
                 if settings.allow_negative_stock:
-                    # Allow negative, continue
                     deductions.append({
                         "product_id": product_id,
                         "warning": str(e)
@@ -110,7 +87,6 @@ class OrderStockService:
                 })
         
         if errors and not settings.allow_negative_stock:
-            # If any errors and negative stock not allowed, the transaction will rollback
             raise BusinessRuleError(f"Stock deduction failed: {errors}")
         
         return success_response({
@@ -128,9 +104,6 @@ class OrderStockService:
                             modifiers: List[Dict],
                             location_id: int,
                             user_id: int) -> Dict:
-        """Deduct stock for a single product"""
-        
-        # Get deduction items from product link
         deduction_items = ProductStockLinkService.get_deduction_items(product_id, quantity)
         
         if not deduction_items:
@@ -142,7 +115,7 @@ class OrderStockService:
             result = StockLevelService.adjust(
                 stock_item_id=item["stock_item_id"],
                 location_id=location_id,
-                quantity=-item["quantity"],  # Negative for deduction
+                quantity=-item["quantity"],  
                 movement_type="SALE_OUT",
                 user_id=user_id,
                 unit_id=item.get("unit_id"),
@@ -156,7 +129,6 @@ class OrderStockService:
                 "transaction_id": result.get("transaction_id")
             })
         
-        # Handle modifiers (add/remove components)
         link = ProductStockLink.objects.filter(
             product_id=product_id,
             link_type="COMPONENT_BASED"
@@ -165,7 +137,7 @@ class OrderStockService:
         if link and modifiers:
             for mod in modifiers:
                 component_id = mod.get("component_id")
-                action = mod.get("action")  # "ADD" or "REMOVE"
+                action = mod.get("action")
                 
                 if not component_id:
                     continue
@@ -177,10 +149,8 @@ class OrderStockService:
                     continue
                 
                 if action == "REMOVE" and comp.is_removable:
-                    # Don't deduct removed component (it's already excluded)
                     pass
                 elif action == "ADD" and comp.is_addable:
-                    # Add extra component deduction
                     result = StockLevelService.adjust(
                         stock_item_id=comp.stock_item_id,
                         location_id=location_id,
@@ -207,10 +177,7 @@ class OrderStockService:
                           order_id: int,
                           user_id: int,
                           reason: str = "Order cancelled") -> Dict[str, Any]:
-        """
-        Reverse stock deductions for a cancelled order.
-        Finds all transactions for the order and creates reverse transactions.
-        """
+
         from stock.models import StockTransaction
         
         settings = StockSettings.load()
@@ -221,7 +188,6 @@ class OrderStockService:
                 "reason": "Stock system disabled"
             })
         
-        # Find all SALE_OUT transactions for this order
         transactions = StockTransaction.objects.filter(
             order_id=order_id,
             movement_type="SALE_OUT"
@@ -236,11 +202,10 @@ class OrderStockService:
         reversals = []
         
         for trans in transactions:
-            # Create reverse transaction
             result = StockLevelService.adjust(
                 stock_item_id=trans.stock_item_id,
                 location_id=trans.location_id,
-                quantity=trans.base_quantity,  # Positive to add back
+                quantity=trans.base_quantity,  
                 movement_type="RETURN_FROM_CUSTOMER",
                 user_id=user_id,
                 batch_id=trans.batch_id,
@@ -265,11 +230,6 @@ class OrderStockService:
     def check_availability(cls,
                            order_items: List[Dict],
                            location_id: int) -> Dict[str, Any]:
-        """
-        Check if stock is available for order items before processing.
-        
-        Returns availability status for each product.
-        """
         settings = StockSettings.load()
         
         if not settings.stock_enabled:
@@ -335,10 +295,7 @@ class OrderStockService:
                           order_items: List[Dict],
                           location_id: int,
                           user_id: int) -> Dict[str, Any]:
-        """
-        Reserve stock for an order (optional pre-allocation).
-        Used when reserve_on_order_create is enabled.
-        """
+
         settings = StockSettings.load()
         
         if not settings.stock_enabled or not settings.reserve_on_order_create:
@@ -380,7 +337,7 @@ class OrderStockService:
     def release_reservation(cls,
                             order_id: int,
                             user_id: int) -> Dict[str, Any]:
-        """Release stock reservations for an order"""
+
         from stock.models import StockTransaction
         
         settings = StockSettings.load()
@@ -388,7 +345,6 @@ class OrderStockService:
         if not settings.stock_enabled:
             return success_response({"skipped": True})
         
-        # Find reservation transactions
         reservations = StockTransaction.objects.filter(
             reference_type="Order",
             reference_id=order_id,
@@ -417,10 +373,7 @@ class OrderStockService:
 
 
 class OrderStatusHandler:
-    """
-    Handler to integrate with existing Order status changes.
-    Call this from your OrderService when status changes.
-    """
+
     
     @classmethod
     def on_status_change(cls,
@@ -430,19 +383,7 @@ class OrderStatusHandler:
                          order_items: List[Dict],
                          location_id: int,
                          user_id: int) -> Dict[str, Any]:
-        """
-        Handle stock operations based on order status change.
-        
-        This should be called from OrderService.update_status()
-        
-        Args:
-            order_id: The order ID
-            old_status: Previous status
-            new_status: New status
-            order_items: List of {product_id, quantity, modifiers}
-            location_id: Location ID
-            user_id: User making the change
-        """
+
         settings = StockSettings.load()
         
         if not settings.stock_enabled:
@@ -450,32 +391,25 @@ class OrderStatusHandler:
         
         result = {"actions": []}
         
-        # Handle reservation on create
         if settings.reserve_on_order_create and old_status is None:
             res = OrderStockService.reserve_for_order(
                 order_id, order_items, location_id, user_id
             )
             result["actions"].append({"action": "reserve", "result": res})
         
-        # Handle deduction
         if new_status == settings.deduct_on_order_status:
-            # Release reservation first if it exists
             if settings.reserve_on_order_create:
                 OrderStockService.release_reservation(order_id, user_id)
             
-            # Deduct stock
             res = OrderStockService.deduct_for_order(
                 order_id, order_items, location_id, user_id, new_status
             )
             result["actions"].append({"action": "deduct", "result": res})
         
-        # Handle cancellation
         if new_status == "CANCELLED":
-            # Release reservation if not yet deducted
             if settings.reserve_on_order_create:
                 OrderStockService.release_reservation(order_id, user_id)
             
-            # Reverse deduction if already deducted
             res = OrderStockService.reverse_deduction(
                 order_id, user_id, "Order cancelled"
             )

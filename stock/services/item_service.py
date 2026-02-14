@@ -1,6 +1,3 @@
-"""
-Stock Item Service - Manage stock items with full features
-"""
 from typing import Dict, Any, Optional, List
 from decimal import Decimal
 from django.db import transaction
@@ -20,11 +17,7 @@ from stock.services.base_service import (
 
 
 class StockItemService(BaseService):
-    """Manage stock items"""
-    
     model = StockItem
-    
-    # ==================== SERIALIZATION ====================
     
     @classmethod
     def serialize(cls, item: StockItem, 
@@ -32,7 +25,6 @@ class StockItemService(BaseService):
                   include_units: bool = False,
                   include_suppliers: bool = False,
                   location_id: int = None) -> Dict[str, Any]:
-        """Convert item to dictionary"""
         data = {
             "id": item.id,
             "uuid": str(item.uuid),
@@ -42,14 +34,12 @@ class StockItemService(BaseService):
             "item_type": item.item_type,
             "item_type_display": item.get_item_type_display(),
             
-            # Category
             "category_id": item.category_id,
             "category": {
                 "id": item.category.id,
                 "name": item.category.name,
             } if item.category else None,
             
-            # Unit
             "base_unit_id": item.base_unit_id,
             "base_unit": {
                 "id": item.base_unit.id,
@@ -57,17 +47,14 @@ class StockItemService(BaseService):
                 "short_name": item.base_unit.short_name,
             },
             
-            # Thresholds
             "min_stock_level": str(item.min_stock_level),
             "max_stock_level": str(item.max_stock_level) if item.max_stock_level else None,
             "reorder_point": str(item.reorder_point),
             
-            # Costs
             "cost_price": str(item.cost_price),
             "avg_cost_price": str(item.avg_cost_price),
             "last_cost_price": str(item.last_cost_price),
             
-            # Flags
             "is_purchasable": item.is_purchasable,
             "is_sellable": item.is_sellable,
             "is_producible": item.is_producible,
@@ -99,7 +86,6 @@ class StockItemService(BaseService):
                 for lvl in levels_query.select_related("location")
             ]
             
-            # Total across all locations
             totals = levels_query.aggregate(
                 total=Sum("quantity"),
                 reserved=Sum("reserved_quantity")
@@ -140,7 +126,6 @@ class StockItemService(BaseService):
     
     @classmethod
     def serialize_brief(cls, item: StockItem) -> Dict[str, Any]:
-        """Brief serialization for lists"""
         return {
             "id": item.id,
             "uuid": str(item.uuid),
@@ -151,8 +136,6 @@ class StockItemService(BaseService):
             "base_unit_short": item.base_unit.short_name,
             "is_active": item.is_active,
         }
-    
-    # ==================== LIST & SEARCH ====================
     
     @classmethod
     def list(cls,
@@ -168,7 +151,6 @@ class StockItemService(BaseService):
              low_stock: bool = False,
              location_id: int = None,
              include_levels: bool = False) -> Dict[str, Any]:
-        """List items with filters and pagination"""
         
         queryset = cls.model.objects.select_related("category", "base_unit")
         
@@ -201,7 +183,6 @@ class StockItemService(BaseService):
             queryset = queryset.filter(is_producible=True)
         
         if low_stock:
-            # Items where total stock is below reorder point
             queryset = queryset.annotate(
                 total_qty=Sum("stock_levels__quantity")
             ).filter(
@@ -228,7 +209,6 @@ class StockItemService(BaseService):
     def search(cls, query: str, limit: int = 20, 
                item_type: str = None,
                purchasable_only: bool = False) -> Dict[str, Any]:
-        """Quick search for autocomplete"""
         queryset = cls.model.objects.filter(
             Q(name__icontains=query) |
             Q(sku__icontains=query) |
@@ -251,8 +231,6 @@ class StockItemService(BaseService):
     
     @classmethod
     def find_by_barcode(cls, barcode: str) -> Dict[str, Any]:
-        """Find item by barcode (main or alternative unit barcode)"""
-        # Check main barcode
         item = cls.model.objects.filter(barcode=barcode, is_active=True).first()
         
         if item:
@@ -262,7 +240,6 @@ class StockItemService(BaseService):
                 "conversion": "1",
             })
         
-        # Check alternative unit barcodes
         item_unit = StockItemUnit.objects.filter(
             barcode=barcode,
             stock_item__is_active=True
@@ -277,14 +254,11 @@ class StockItemService(BaseService):
         
         raise NotFoundError("Item with barcode", barcode)
     
-    # ==================== GET SINGLE ====================
-    
     @classmethod
     def get(cls, item_id: int, 
             include_levels: bool = True,
             include_units: bool = True,
             include_suppliers: bool = True) -> Dict[str, Any]:
-        """Get single item with full details"""
         item = cls.model.objects.select_related("category", "base_unit").filter(id=item_id).first()
         if not item:
             raise NotFoundError("Stock item", item_id)
@@ -297,8 +271,6 @@ class StockItemService(BaseService):
                 include_suppliers=include_suppliers
             )
         })
-    
-    # ==================== CREATE ====================
     
     @classmethod
     @transaction.atomic
@@ -322,20 +294,16 @@ class StockItemService(BaseService):
                storage_conditions: str = "",
                initial_stock: Decimal = None,
                initial_location_id: int = None) -> Dict[str, Any]:
-        """Create new stock item"""
         
-        # Validate type
         valid_types = [c[0] for c in StockItem.ItemType.choices]
         if item_type not in valid_types:
             raise ValidationError(f"Invalid type. Valid: {valid_types}", "item_type")
         
-        # Validate base unit
         try:
             base_unit = StockUnit.objects.get(id=base_unit_id, is_active=True)
         except StockUnit.DoesNotExist:
             raise NotFoundError("Base unit", base_unit_id)
         
-        # Validate category
         category = None
         if category_id:
             try:
@@ -343,17 +311,14 @@ class StockItemService(BaseService):
             except StockCategory.DoesNotExist:
                 raise NotFoundError("Category", category_id)
         
-        # Check SKU uniqueness
         if sku:
             if cls.model.objects.filter(sku=sku).exists():
                 raise ValidationError(f"SKU '{sku}' already exists", "sku")
         
-        # Check barcode uniqueness
         if barcode:
             if cls.model.objects.filter(barcode=barcode).exists():
                 raise ValidationError(f"Barcode '{barcode}' already exists", "barcode")
         
-        # Generate SKU if not provided
         if not sku:
             sku = cls._generate_sku(name, item_type)
         
@@ -379,7 +344,6 @@ class StockItemService(BaseService):
             storage_conditions=storage_conditions,
         )
         
-        # Create initial stock if specified
         if initial_stock and to_decimal(initial_stock) > 0:
             from stock.services.level_service import StockLevelService
             location_id = initial_location_id
@@ -406,34 +370,28 @@ class StockItemService(BaseService):
     
     @classmethod
     def _generate_sku(cls, name: str, item_type: str) -> str:
-        """Generate unique SKU"""
         prefix = item_type[:3].upper()
         name_part = "".join(c for c in name.upper() if c.isalnum())[:3]
         
-        # Find next number
         existing = cls.model.objects.filter(
             sku__startswith=f"{prefix}-{name_part}"
         ).count()
         
         return f"{prefix}-{name_part}-{existing + 1:04d}"
     
-    # ==================== UPDATE ====================
     
     @classmethod
     @transaction.atomic
     def update(cls, item_id: int, **kwargs) -> Dict[str, Any]:
-        """Update stock item"""
         item = cls.get_by_id(item_id)
         if not item:
             raise NotFoundError("Stock item", item_id)
         
-        # Validate type if provided
         if "item_type" in kwargs:
             valid_types = [c[0] for c in StockItem.ItemType.choices]
             if kwargs["item_type"] not in valid_types:
                 raise ValidationError(f"Invalid type. Valid: {valid_types}", "item_type")
         
-        # Validate category
         if "category_id" in kwargs:
             if kwargs["category_id"]:
                 try:
@@ -444,28 +402,23 @@ class StockItemService(BaseService):
             else:
                 item.category = None
         
-        # Validate base_unit
         if "base_unit_id" in kwargs:
             try:
                 base_unit = StockUnit.objects.get(id=kwargs["base_unit_id"], is_active=True)
-                # Check if item has transactions - can't change unit if it does
                 if StockTransaction.objects.filter(stock_item=item).exists():
                     raise BusinessRuleError("Cannot change base unit for item with transactions")
                 item.base_unit = base_unit
             except StockUnit.DoesNotExist:
                 raise NotFoundError("Base unit", kwargs["base_unit_id"])
         
-        # Check SKU uniqueness
         if "sku" in kwargs and kwargs["sku"] != item.sku:
             if cls.model.objects.filter(sku=kwargs["sku"]).exclude(id=item_id).exists():
                 raise ValidationError(f"SKU '{kwargs['sku']}' already exists", "sku")
         
-        # Check barcode uniqueness
         if "barcode" in kwargs and kwargs["barcode"] != item.barcode:
             if kwargs["barcode"] and cls.model.objects.filter(barcode=kwargs["barcode"]).exclude(id=item_id).exists():
                 raise ValidationError(f"Barcode '{kwargs['barcode']}' already exists", "barcode")
         
-        # Update fields
         update_fields = ["updated_at"]
         direct_fields = [
             "name", "sku", "barcode", "item_type",
@@ -493,16 +446,10 @@ class StockItemService(BaseService):
             "item": cls.serialize(item, include_levels=True)
         }, "Stock item updated")
     
-    # ==================== UPDATE COSTS ====================
-    
     @classmethod
     @transaction.atomic
     def update_cost(cls, item_id: int, new_cost: Decimal, 
                     update_type: str = "LAST") -> Dict[str, Any]:
-        """
-        Update item cost price.
-        update_type: LAST (only last_cost_price), AVG (recalculate avg), ALL (update all)
-        """
         item = cls.get_by_id(item_id)
         if not item:
             raise NotFoundError("Stock item", item_id)
@@ -516,15 +463,12 @@ class StockItemService(BaseService):
             item.avg_cost_price = new_cost
             update_fields.extend(["cost_price", "avg_cost_price"])
         elif update_type == "AVG":
-            # Calculate weighted average with current stock
             total_qty = StockLevel.objects.filter(stock_item=item).aggregate(
                 total=Sum("quantity")
             )["total"] or Decimal("0")
             
             if total_qty > 0:
                 old_value = total_qty * item.avg_cost_price
-                # Assuming this is a new purchase quantity of 1
-                # In practice, this would come from the actual receiving quantity
                 new_avg = (old_value + new_cost) / (total_qty + 1)
                 item.avg_cost_price = round_decimal(new_avg, 4)
             else:
@@ -539,17 +483,14 @@ class StockItemService(BaseService):
             "last_cost_price": str(item.last_cost_price),
         }, "Cost updated")
     
-    # ==================== DEACTIVATE / ACTIVATE ====================
     
     @classmethod
     @transaction.atomic
     def deactivate(cls, item_id: int, force: bool = False) -> Dict[str, Any]:
-        """Deactivate stock item"""
         item = cls.get_by_id(item_id)
         if not item:
             raise NotFoundError("Stock item", item_id)
         
-        # Check if item has stock
         if not force:
             total_stock = StockLevel.objects.filter(stock_item=item).aggregate(
                 total=Sum("quantity")
@@ -571,7 +512,6 @@ class StockItemService(BaseService):
     @classmethod
     @transaction.atomic
     def activate(cls, item_id: int) -> Dict[str, Any]:
-        """Activate stock item"""
         item = cls.get_by_id(item_id)
         if not item:
             raise NotFoundError("Stock item", item_id)
@@ -583,11 +523,8 @@ class StockItemService(BaseService):
             "item": cls.serialize(item)
         }, "Stock item activated")
     
-    # ==================== STATS ====================
-    
     @classmethod
     def get_stats(cls) -> Dict[str, Any]:
-        """Get stock item statistics"""
         total = cls.model.objects.filter(is_active=True).count()
         by_type = {}
         
@@ -597,7 +534,6 @@ class StockItemService(BaseService):
                 item_type=type_choice[0]
             ).count()
         
-        # Low stock items
         low_stock = cls.model.objects.filter(
             is_active=True
         ).annotate(
@@ -607,7 +543,6 @@ class StockItemService(BaseService):
             Q(total_qty__isnull=True)
         ).count()
         
-        # No category
         no_category = cls.model.objects.filter(
             is_active=True,
             category__isnull=True

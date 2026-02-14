@@ -1,6 +1,3 @@
-"""
-Supplier Service - Manage suppliers and their items
-"""
 from typing import Dict, Any, Optional, List
 from decimal import Decimal
 from django.db import transaction
@@ -19,17 +16,12 @@ from stock.services.base_service import (
 
 
 class SupplierService(BaseService):
-    """Manage suppliers"""
-    
     model = Supplier
-    
-    # ==================== SERIALIZATION ====================
     
     @classmethod
     def serialize(cls, supplier: Supplier, 
                   include_items: bool = False,
                   include_stats: bool = False) -> Dict[str, Any]:
-        """Convert supplier to dictionary"""
         data = {
             "id": supplier.id,
             "uuid": str(supplier.uuid),
@@ -37,25 +29,21 @@ class SupplierService(BaseService):
             "name": supplier.name,
             "legal_name": supplier.legal_name,
             
-            # Contact
             "contact_person": supplier.contact_person,
             "email": supplier.email,
             "phone": supplier.phone,
             "mobile": supplier.mobile,
             
-            # Address
             "address": supplier.address,
             "city": supplier.city,
             "country": supplier.country,
             "tax_id": supplier.tax_id,
             
-            # Financial
             "payment_terms_days": supplier.payment_terms_days,
             "credit_limit": str(supplier.credit_limit) if supplier.credit_limit else None,
             "current_balance": str(supplier.current_balance),
             "currency": supplier.currency,
             
-            # Logistics
             "lead_time_days": supplier.lead_time_days,
             "minimum_order_value": str(supplier.minimum_order_value) if supplier.minimum_order_value else None,
             
@@ -73,7 +61,6 @@ class SupplierService(BaseService):
             data["item_count"] = supplier.stock_items.count()
         
         if include_stats:
-            # Purchase order statistics
             po_stats = PurchaseOrder.objects.filter(supplier=supplier).aggregate(
                 total_orders=Count("id"),
                 total_value=Sum("total"),
@@ -89,7 +76,6 @@ class SupplierService(BaseService):
     
     @classmethod
     def serialize_brief(cls, supplier: Supplier) -> Dict[str, Any]:
-        """Brief serialization for lists"""
         return {
             "id": supplier.id,
             "uuid": str(supplier.uuid),
@@ -100,8 +86,6 @@ class SupplierService(BaseService):
             "is_active": supplier.is_active,
         }
     
-    # ==================== LIST & SEARCH ====================
-    
     @classmethod
     def list(cls,
              page: int = 1,
@@ -109,7 +93,6 @@ class SupplierService(BaseService):
              search: str = None,
              active_only: bool = True,
              has_items_only: bool = False) -> Dict[str, Any]:
-        """List suppliers with filters"""
         queryset = cls.model.objects.all()
         
         if active_only:
@@ -139,7 +122,6 @@ class SupplierService(BaseService):
     
     @classmethod
     def search(cls, query: str, limit: int = 20) -> Dict[str, Any]:
-        """Quick search for autocomplete"""
         suppliers = cls.model.objects.filter(
             Q(name__icontains=query) | Q(code__icontains=query),
             is_active=True
@@ -152,7 +134,6 @@ class SupplierService(BaseService):
     
     @classmethod
     def get_for_item(cls, stock_item_id: int) -> Dict[str, Any]:
-        """Get all suppliers for a stock item"""
         supplier_items = SupplierStockItem.objects.filter(
             stock_item_id=stock_item_id,
             supplier__is_active=True
@@ -177,13 +158,10 @@ class SupplierService(BaseService):
             "count": len(suppliers)
         })
     
-    # ==================== GET SINGLE ====================
-    
     @classmethod
     def get(cls, supplier_id: int, 
             include_items: bool = True,
             include_stats: bool = True) -> Dict[str, Any]:
-        """Get single supplier"""
         supplier = cls.get_by_id(supplier_id)
         if not supplier:
             raise NotFoundError("Supplier", supplier_id)
@@ -191,8 +169,6 @@ class SupplierService(BaseService):
         return success_response({
             "supplier": cls.serialize(supplier, include_items=include_items, include_stats=include_stats)
         })
-    
-    # ==================== CREATE ====================
     
     @classmethod
     @transaction.atomic
@@ -215,17 +191,13 @@ class SupplierService(BaseService):
                minimum_order_value: Decimal = None,
                rating: int = None,
                notes: str = "") -> Dict[str, Any]:
-        """Create new supplier"""
         
-        # Generate code if not provided
         if not code:
             code = cls._generate_code(name)
         
-        # Check code uniqueness
         if cls.model.objects.filter(code=code).exists():
             raise ValidationError(f"Supplier code '{code}' already exists", "code")
         
-        # Validate rating
         if rating is not None and (rating < 1 or rating > 5):
             raise ValidationError("Rating must be between 1 and 5", "rating")
         
@@ -259,37 +231,28 @@ class SupplierService(BaseService):
     
     @classmethod
     def _generate_code(cls, name: str) -> str:
-        """Generate unique supplier code"""
-        # Take first 3 letters of name
         prefix = "".join(c for c in name.upper() if c.isalnum())[:3]
         if len(prefix) < 3:
             prefix = prefix.ljust(3, "X")
         
-        # Find next number
         count = cls.model.objects.filter(code__startswith=prefix).count()
         return f"{prefix}{count + 1:03d}"
-    
-    # ==================== UPDATE ====================
     
     @classmethod
     @transaction.atomic
     def update(cls, supplier_id: int, **kwargs) -> Dict[str, Any]:
-        """Update supplier"""
         supplier = cls.get_by_id(supplier_id)
         if not supplier:
             raise NotFoundError("Supplier", supplier_id)
         
-        # Check code uniqueness
         if "code" in kwargs and kwargs["code"] != supplier.code:
             if cls.model.objects.filter(code=kwargs["code"]).exclude(id=supplier_id).exists():
                 raise ValidationError(f"Supplier code '{kwargs['code']}' already exists", "code")
         
-        # Validate rating
         if "rating" in kwargs and kwargs["rating"] is not None:
             if kwargs["rating"] < 1 or kwargs["rating"] > 5:
                 raise ValidationError("Rating must be between 1 and 5", "rating")
         
-        # Update fields
         update_fields = ["updated_at"]
         allowed_fields = [
             "code", "name", "legal_name", "contact_person", "email",
@@ -309,17 +272,14 @@ class SupplierService(BaseService):
             "supplier": cls.serialize(supplier)
         }, "Supplier updated")
     
-    # ==================== DEACTIVATE / ACTIVATE ====================
     
     @classmethod
     @transaction.atomic
     def deactivate(cls, supplier_id: int) -> Dict[str, Any]:
-        """Deactivate supplier"""
         supplier = cls.get_by_id(supplier_id)
         if not supplier:
             raise NotFoundError("Supplier", supplier_id)
         
-        # Check for pending POs
         pending_pos = PurchaseOrder.objects.filter(
             supplier=supplier,
             status__in=["DRAFT", "SENT", "CONFIRMED", "PARTIAL"]
@@ -338,7 +298,6 @@ class SupplierService(BaseService):
     @classmethod
     @transaction.atomic
     def activate(cls, supplier_id: int) -> Dict[str, Any]:
-        """Activate supplier"""
         supplier = cls.get_by_id(supplier_id)
         if not supplier:
             raise NotFoundError("Supplier", supplier_id)
@@ -350,12 +309,9 @@ class SupplierService(BaseService):
             "supplier": cls.serialize(supplier)
         }, "Supplier activated")
     
-    # ==================== BALANCE MANAGEMENT ====================
-    
     @classmethod
     @transaction.atomic
     def update_balance(cls, supplier_id: int, amount: Decimal, operation: str = "add") -> Dict[str, Any]:
-        """Update supplier balance"""
         supplier = cls.get_by_id(supplier_id)
         if not supplier:
             raise NotFoundError("Supplier", supplier_id)
@@ -379,13 +335,11 @@ class SupplierService(BaseService):
 
 
 class SupplierStockItemService(BaseService):
-    """Manage supplier-item relationships"""
     
     model = SupplierStockItem
     
     @classmethod
     def serialize(cls, si: SupplierStockItem) -> Dict[str, Any]:
-        """Serialize supplier stock item"""
         return {
             "id": si.id,
             "uuid": str(si.uuid),
@@ -422,31 +376,25 @@ class SupplierStockItemService(BaseService):
                  lead_time_days: int = None,
                  is_preferred: bool = False,
                  notes: str = "") -> Dict[str, Any]:
-        """Add item to supplier catalog"""
         
-        # Validate supplier
         try:
             supplier = Supplier.objects.get(id=supplier_id, is_active=True)
         except Supplier.DoesNotExist:
             raise NotFoundError("Supplier", supplier_id)
         
-        # Validate stock item
         try:
             stock_item = StockItem.objects.get(id=stock_item_id)
         except StockItem.DoesNotExist:
             raise NotFoundError("Stock item", stock_item_id)
         
-        # Validate unit
         try:
             unit = StockUnit.objects.get(id=unit_id, is_active=True)
         except StockUnit.DoesNotExist:
             raise NotFoundError("Unit", unit_id)
         
-        # Check duplicate
         if cls.model.objects.filter(supplier_id=supplier_id, stock_item_id=stock_item_id).exists():
             raise ValidationError("Item already exists for this supplier", "stock_item_id")
         
-        # If setting as preferred, unset others
         if is_preferred:
             cls.model.objects.filter(
                 stock_item_id=stock_item_id, 
@@ -477,7 +425,6 @@ class SupplierStockItemService(BaseService):
     @classmethod
     @transaction.atomic
     def update_item(cls, supplier_item_id: int, **kwargs) -> Dict[str, Any]:
-        """Update supplier item"""
         try:
             si = cls.model.objects.select_related("stock_item", "unit").get(id=supplier_item_id)
         except cls.model.DoesNotExist:
@@ -497,12 +444,10 @@ class SupplierStockItemService(BaseService):
                 setattr(si, field, value)
                 update_fields.append(field)
         
-        # Track price update
         if "price" in kwargs:
             si.last_price_update = timezone.now()
             update_fields.append("last_price_update")
         
-        # Handle preferred flag
         if "is_preferred" in kwargs and kwargs["is_preferred"]:
             cls.model.objects.filter(
                 stock_item=si.stock_item,
@@ -520,7 +465,6 @@ class SupplierStockItemService(BaseService):
     @classmethod
     @transaction.atomic
     def remove_item(cls, supplier_item_id: int) -> Dict[str, Any]:
-        """Remove item from supplier catalog"""
         try:
             si = cls.model.objects.get(id=supplier_item_id)
         except cls.model.DoesNotExist:
@@ -532,7 +476,6 @@ class SupplierStockItemService(BaseService):
     
     @classmethod
     def get_preferred_supplier(cls, stock_item_id: int) -> Optional[SupplierStockItem]:
-        """Get preferred supplier for an item"""
         return cls.model.objects.filter(
             stock_item_id=stock_item_id,
             is_preferred=True,
@@ -541,7 +484,6 @@ class SupplierStockItemService(BaseService):
     
     @classmethod
     def get_cheapest_supplier(cls, stock_item_id: int) -> Optional[SupplierStockItem]:
-        """Get cheapest supplier for an item"""
         return cls.model.objects.filter(
             stock_item_id=stock_item_id,
             supplier__is_active=True

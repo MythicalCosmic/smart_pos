@@ -1,6 +1,3 @@
-"""
-Product Stock Link Service - Link POS products to stock for automatic deduction
-"""
 from typing import Dict, Any, Optional, List
 from decimal import Decimal
 from django.db import transaction
@@ -19,15 +16,12 @@ from base_service import (
 
 
 class ProductStockLinkService(BaseService):
-    """Manage links between POS products and stock items/recipes"""
     
     model = ProductStockLink
     
-    # ==================== SERIALIZATION ====================
     
     @classmethod
     def serialize(cls, link: ProductStockLink, include_components: bool = False) -> Dict[str, Any]:
-        """Convert link to dictionary"""
         data = {
             "id": link.id,
             "uuid": str(link.uuid),
@@ -62,7 +56,6 @@ class ProductStockLinkService(BaseService):
         
         return data
     
-    # ==================== LIST ====================
     
     @classmethod
     def list(cls,
@@ -71,7 +64,6 @@ class ProductStockLinkService(BaseService):
              link_type: str = None,
              active_only: bool = True,
              unlinked_only: bool = False) -> Dict[str, Any]:
-        """List product stock links"""
         queryset = cls.model.objects.select_related(
             "recipe", "stock_item", "unit"
         )
@@ -93,11 +85,9 @@ class ProductStockLinkService(BaseService):
             "deduct_statuses": [{"value": c[0], "label": c[1]} for c in ProductStockLink.DeductOn.choices],
         })
     
-    # ==================== GET ====================
     
     @classmethod
     def get(cls, link_id: int, include_components: bool = True) -> Dict[str, Any]:
-        """Get single link"""
         link = cls.model.objects.select_related(
             "recipe", "stock_item", "unit"
         ).filter(id=link_id).first()
@@ -111,7 +101,6 @@ class ProductStockLinkService(BaseService):
     
     @classmethod
     def get_by_product(cls, product_id: int) -> Dict[str, Any]:
-        """Get link for a product"""
         link = cls.model.objects.select_related(
             "recipe", "stock_item", "unit"
         ).filter(product_id=product_id).first()
@@ -127,7 +116,6 @@ class ProductStockLinkService(BaseService):
             "is_linked": True
         })
     
-    # ==================== CREATE LINKS ====================
     
     @classmethod
     @transaction.atomic
@@ -135,19 +123,15 @@ class ProductStockLinkService(BaseService):
                        product_id: int,
                        recipe_id: int,
                        deduct_on_status: str = "PREPARING") -> Dict[str, Any]:
-        """Link product to a recipe"""
         
-        # Check if product already linked
         if cls.model.objects.filter(product_id=product_id).exists():
             raise BusinessRuleError("Product already has a stock link. Remove existing link first.")
         
-        # Validate recipe
         try:
             recipe = Recipe.objects.get(id=recipe_id, is_active=True)
         except Recipe.DoesNotExist:
             raise NotFoundError("Recipe", recipe_id)
         
-        # Validate deduct status
         valid_statuses = [c[0] for c in ProductStockLink.DeductOn.choices]
         if deduct_on_status not in valid_statuses:
             raise ValidationError(f"Invalid status. Valid: {valid_statuses}", "deduct_on_status")
@@ -174,19 +158,15 @@ class ProductStockLinkService(BaseService):
                      quantity_per_sale: Decimal = Decimal("1"),
                      unit_id: int = None,
                      deduct_on_status: str = "PREPARING") -> Dict[str, Any]:
-        """Link product directly to a stock item"""
         
-        # Check if product already linked
         if cls.model.objects.filter(product_id=product_id).exists():
             raise BusinessRuleError("Product already has a stock link. Remove existing link first.")
         
-        # Validate stock item
         try:
             stock_item = StockItem.objects.get(id=stock_item_id, is_active=True)
         except StockItem.DoesNotExist:
             raise NotFoundError("Stock item", stock_item_id)
         
-        # Validate unit
         if unit_id:
             try:
                 unit = StockUnit.objects.get(id=unit_id, is_active=True)
@@ -195,7 +175,6 @@ class ProductStockLinkService(BaseService):
         else:
             unit = stock_item.base_unit
         
-        # Validate deduct status
         valid_statuses = [c[0] for c in ProductStockLink.DeductOn.choices]
         if deduct_on_status not in valid_statuses:
             raise ValidationError(f"Invalid status. Valid: {valid_statuses}", "deduct_on_status")
@@ -220,16 +199,13 @@ class ProductStockLinkService(BaseService):
                              product_id: int,
                              components: List[Dict],
                              deduct_on_status: str = "PREPARING") -> Dict[str, Any]:
-        """Link product with multiple component items"""
         
-        # Check if product already linked
         if cls.model.objects.filter(product_id=product_id).exists():
             raise BusinessRuleError("Product already has a stock link. Remove existing link first.")
         
         if not components:
             raise ValidationError("At least one component required", "components")
         
-        # Validate deduct status
         valid_statuses = [c[0] for c in ProductStockLink.DeductOn.choices]
         if deduct_on_status not in valid_statuses:
             raise ValidationError(f"Invalid status. Valid: {valid_statuses}", "deduct_on_status")
@@ -241,7 +217,6 @@ class ProductStockLinkService(BaseService):
             deduct_on_status=deduct_on_status,
         )
         
-        # Add components
         for comp_data in components:
             ProductComponentService.add_component(
                 link_id=link.id,
@@ -260,24 +235,19 @@ class ProductStockLinkService(BaseService):
             "link": cls.serialize(link, include_components=True)
         }, "Product linked with components")
     
-    # ==================== UPDATE ====================
-    
     @classmethod
     @transaction.atomic
     def update(cls, link_id: int, **kwargs) -> Dict[str, Any]:
-        """Update link settings"""
         link = cls.get_by_id(link_id)
         if not link:
             raise NotFoundError("Product link", link_id)
         
         update_fields = ["updated_at"]
         
-        # Update quantity
         if "quantity_per_sale" in kwargs:
             link.quantity_per_sale = to_decimal(kwargs["quantity_per_sale"])
             update_fields.append("quantity_per_sale")
         
-        # Update deduct status
         if "deduct_on_status" in kwargs:
             valid_statuses = [c[0] for c in ProductStockLink.DeductOn.choices]
             if kwargs["deduct_on_status"] not in valid_statuses:
@@ -285,7 +255,6 @@ class ProductStockLinkService(BaseService):
             link.deduct_on_status = kwargs["deduct_on_status"]
             update_fields.append("deduct_on_status")
         
-        # Update active status
         if "is_active" in kwargs:
             link.is_active = kwargs["is_active"]
             update_fields.append("is_active")
@@ -296,12 +265,9 @@ class ProductStockLinkService(BaseService):
             "link": cls.serialize(link, include_components=True)
         }, "Link updated")
     
-    # ==================== DELETE ====================
-    
     @classmethod
     @transaction.atomic
     def unlink(cls, product_id: int) -> Dict[str, Any]:
-        """Remove product stock link"""
         link = cls.model.objects.filter(product_id=product_id).first()
         
         if not link:
@@ -311,14 +277,10 @@ class ProductStockLinkService(BaseService):
         
         return success_response(message="Product unlinked from stock")
     
-    # ==================== DEDUCTION LOGIC ====================
     
     @classmethod
     def get_deduction_items(cls, product_id: int, quantity: int = 1) -> List[Dict]:
-        """
-        Get list of stock items to deduct for a product sale.
-        Returns list of: [{stock_item_id, quantity, unit_id}]
-        """
+
         link = cls.model.objects.select_related(
             "recipe", "stock_item", "unit"
         ).filter(product_id=product_id, is_active=True).first()
@@ -330,7 +292,6 @@ class ProductStockLinkService(BaseService):
         sale_qty = to_decimal(quantity)
         
         if link.link_type == "DIRECT_ITEM":
-            # Simple: deduct stock item directly
             if link.stock_item:
                 deductions.append({
                     "stock_item_id": link.stock_item_id,
@@ -339,7 +300,6 @@ class ProductStockLinkService(BaseService):
                 })
         
         elif link.link_type == "RECIPE":
-            # Deduct recipe ingredients
             if link.recipe:
                 for ingredient in link.recipe.ingredients.select_related("stock_item", "unit"):
                     deductions.append({
@@ -349,7 +309,6 @@ class ProductStockLinkService(BaseService):
                     })
         
         elif link.link_type == "COMPONENT_BASED":
-            # Deduct components
             for comp in link.components.filter(is_default=True).select_related("stock_item", "unit"):
                 deductions.append({
                     "stock_item_id": comp.stock_item_id,
@@ -361,7 +320,6 @@ class ProductStockLinkService(BaseService):
     
     @classmethod
     def should_deduct(cls, product_id: int, order_status: str) -> bool:
-        """Check if stock should be deducted for this product at this order status"""
         settings = StockSettings.load()
         
         if not settings.stock_enabled or not settings.auto_deduct_on_sale:
@@ -376,13 +334,11 @@ class ProductStockLinkService(BaseService):
 
 
 class ProductComponentService(BaseService):
-    """Manage product components (for COMPONENT_BASED links)"""
     
     model = ProductComponentStock
     
     @classmethod
     def serialize(cls, comp: ProductComponentStock) -> Dict[str, Any]:
-        """Serialize component"""
         return {
             "id": comp.id,
             "uuid": str(comp.uuid),
@@ -410,9 +366,7 @@ class ProductComponentService(BaseService):
                       is_addable: bool = True,
                       is_removable: bool = True,
                       price_modifier: Decimal = Decimal("0")) -> Dict[str, Any]:
-        """Add component to product link"""
         
-        # Validate link
         try:
             link = ProductStockLink.objects.get(id=link_id)
         except ProductStockLink.DoesNotExist:
@@ -421,13 +375,11 @@ class ProductComponentService(BaseService):
         if link.link_type != "COMPONENT_BASED":
             raise BusinessRuleError("Can only add components to COMPONENT_BASED links")
         
-        # Validate stock item
         try:
             stock_item = StockItem.objects.get(id=stock_item_id, is_active=True)
         except StockItem.DoesNotExist:
             raise NotFoundError("Stock item", stock_item_id)
         
-        # Validate unit
         if unit_id:
             try:
                 unit = StockUnit.objects.get(id=unit_id, is_active=True)
@@ -456,7 +408,6 @@ class ProductComponentService(BaseService):
     @classmethod
     @transaction.atomic
     def update_component(cls, component_id: int, **kwargs) -> Dict[str, Any]:
-        """Update component"""
         try:
             comp = cls.model.objects.get(id=component_id)
         except cls.model.DoesNotExist:
@@ -478,7 +429,6 @@ class ProductComponentService(BaseService):
     @classmethod
     @transaction.atomic
     def remove_component(cls, component_id: int) -> Dict[str, Any]:
-        """Remove component"""
         try:
             comp = cls.model.objects.get(id=component_id)
         except cls.model.DoesNotExist:
@@ -490,7 +440,6 @@ class ProductComponentService(BaseService):
     
     @classmethod
     def get_for_link(cls, link_id: int) -> Dict[str, Any]:
-        """Get all components for a link"""
         components = cls.model.objects.filter(
             product_stock_link_id=link_id
         ).select_related("stock_item", "unit")

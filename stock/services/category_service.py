@@ -1,6 +1,3 @@
-"""
-Stock Category Service - Manage stock categories with hierarchy
-"""
 from typing import Dict, Any, Optional, List
 from django.db import transaction
 from django.db.models import Q, Count
@@ -13,17 +10,12 @@ from stock.services.base_service import (
 
 
 class StockCategoryService(BaseService):
-    """Manage stock categories"""
-    
     model = StockCategory
-    
-    # ==================== SERIALIZATION ====================
-    
+
     @classmethod
     def serialize(cls, category: StockCategory, 
                   include_children: bool = False,
                   include_item_count: bool = False) -> Dict[str, Any]:
-        """Convert category to dictionary"""
         data = {
             "id": category.id,
             "uuid": str(category.uuid),
@@ -56,7 +48,6 @@ class StockCategoryService(BaseService):
         
         return data
     
-    # ==================== LIST & SEARCH ====================
     
     @classmethod
     def list(cls,
@@ -64,7 +55,6 @@ class StockCategoryService(BaseService):
              type_filter: str = None,
              parent_id: int = None,
              include_item_count: bool = False) -> Dict[str, Any]:
-        """List categories with filters"""
         queryset = cls.model.objects.all()
         
         if not include_inactive:
@@ -97,7 +87,6 @@ class StockCategoryService(BaseService):
     
     @classmethod
     def get_tree(cls, include_inactive: bool = False) -> Dict[str, Any]:
-        """Get categories as hierarchical tree"""
         queryset = cls.model.objects.filter(parent__isnull=True)
         
         if not include_inactive:
@@ -118,7 +107,6 @@ class StockCategoryService(BaseService):
     
     @classmethod
     def search(cls, query: str, limit: int = 20) -> Dict[str, Any]:
-        """Search categories"""
         categories = cls.model.objects.filter(
             Q(name__icontains=query),
             is_active=True
@@ -131,7 +119,6 @@ class StockCategoryService(BaseService):
     
     @classmethod
     def get_by_type(cls, category_type: str) -> Dict[str, Any]:
-        """Get categories by type"""
         valid_types = [c[0] for c in StockCategory.CategoryType.choices]
         if category_type not in valid_types:
             raise ValidationError(f"Invalid type. Valid: {valid_types}", "type")
@@ -146,13 +133,11 @@ class StockCategoryService(BaseService):
             "count": categories.count()
         })
     
-    # ==================== GET SINGLE ====================
     
     @classmethod
     def get(cls, category_id: int, 
             include_children: bool = True,
             include_item_count: bool = True) -> Dict[str, Any]:
-        """Get single category"""
         category = cls.get_by_id(category_id)
         if not category:
             raise NotFoundError("Category", category_id)
@@ -165,7 +150,6 @@ class StockCategoryService(BaseService):
             )
         })
     
-    # ==================== CREATE ====================
     
     @classmethod
     @transaction.atomic
@@ -174,14 +158,11 @@ class StockCategoryService(BaseService):
                type: str,
                parent_id: int = None,
                sort_order: int = 0) -> Dict[str, Any]:
-        """Create new category"""
         
-        # Validate type
         valid_types = [c[0] for c in StockCategory.CategoryType.choices]
         if type not in valid_types:
             raise ValidationError(f"Invalid type. Valid: {valid_types}", "type")
         
-        # Check duplicate name within parent
         duplicate_query = cls.model.objects.filter(name__iexact=name)
         if parent_id:
             duplicate_query = duplicate_query.filter(parent_id=parent_id)
@@ -191,7 +172,6 @@ class StockCategoryService(BaseService):
         if duplicate_query.exists():
             raise ValidationError(f"Category '{name}' already exists at this level", "name")
         
-        # Validate parent
         parent = None
         if parent_id:
             parent = cls.get_by_id(parent_id)
@@ -213,7 +193,6 @@ class StockCategoryService(BaseService):
             "category": cls.serialize(category)
         }, f"Category '{name}' created")
     
-    # ==================== UPDATE ====================
     
     @classmethod
     @transaction.atomic
@@ -223,7 +202,6 @@ class StockCategoryService(BaseService):
         if not category:
             raise NotFoundError("Category", category_id)
         
-        # Validate type
         if "type" in kwargs:
             valid_types = [c[0] for c in StockCategory.CategoryType.choices]
             if kwargs["type"] not in valid_types:
@@ -241,7 +219,6 @@ class StockCategoryService(BaseService):
             if duplicate_query.exists():
                 raise ValidationError(f"Category '{kwargs['name']}' already exists at this level", "name")
         
-        # Validate parent change
         if "parent_id" in kwargs:
             if kwargs["parent_id"]:
                 parent = cls.get_by_id(kwargs["parent_id"])
@@ -249,14 +226,12 @@ class StockCategoryService(BaseService):
                     raise NotFoundError("Parent category", kwargs["parent_id"])
                 if parent.id == category_id:
                     raise BusinessRuleError("Category cannot be its own parent")
-                # Check circular reference
                 if cls._is_descendant(parent, category):
                     raise BusinessRuleError("Cannot create circular hierarchy")
                 category.parent = parent
             else:
                 category.parent = None
         
-        # Update fields
         update_fields = ["updated_at"]
         for field in ["name", "type", "sort_order"]:
             if field in kwargs:
@@ -274,7 +249,6 @@ class StockCategoryService(BaseService):
     
     @classmethod
     def _is_descendant(cls, category: StockCategory, potential_ancestor: StockCategory) -> bool:
-        """Check if category is a descendant of potential_ancestor"""
         current = category
         while current.parent:
             if current.parent_id == potential_ancestor.id:
@@ -282,29 +256,23 @@ class StockCategoryService(BaseService):
             current = current.parent
         return False
     
-    # ==================== DELETE / DEACTIVATE ====================
     
     @classmethod
     @transaction.atomic
     def deactivate(cls, category_id: int, cascade: bool = False) -> Dict[str, Any]:
-        """Deactivate category"""
         category = cls.get_by_id(category_id)
         if not category:
             raise NotFoundError("Category", category_id)
         
-        # Check for active items
         if StockItem.objects.filter(category=category, is_active=True).exists():
             if not cascade:
                 raise BusinessRuleError("Cannot deactivate category with active items. Use cascade=True or reassign items first.")
-            # Cascade: Set items to no category
             StockItem.objects.filter(category=category).update(category=None)
         
-        # Check for active children
         active_children = category.children.filter(is_active=True)
         if active_children.exists():
             if not cascade:
                 raise BusinessRuleError("Cannot deactivate category with active children. Use cascade=True.")
-            # Cascade deactivate children
             for child in active_children:
                 cls.deactivate(child.id, cascade=True)
         
@@ -318,12 +286,10 @@ class StockCategoryService(BaseService):
     @classmethod
     @transaction.atomic
     def activate(cls, category_id: int) -> Dict[str, Any]:
-        """Reactivate category"""
         category = cls.get_by_id(category_id)
         if not category:
             raise NotFoundError("Category", category_id)
         
-        # If has parent, ensure parent is active
         if category.parent and not category.parent.is_active:
             raise BusinessRuleError("Cannot activate category with inactive parent")
         
@@ -334,12 +300,10 @@ class StockCategoryService(BaseService):
             "category": cls.serialize(category)
         }, "Category activated")
     
-    # ==================== REORDER ====================
     
     @classmethod
     @transaction.atomic
     def reorder(cls, category_ids: List[int]) -> Dict[str, Any]:
-        """Reorder categories"""
         for index, cat_id in enumerate(category_ids):
             cls.model.objects.filter(id=cat_id).update(sort_order=index)
         
@@ -347,10 +311,8 @@ class StockCategoryService(BaseService):
             "reordered": len(category_ids)
         }, "Categories reordered")
     
-    # ==================== MOVE ====================
     
     @classmethod
     @transaction.atomic
     def move(cls, category_id: int, new_parent_id: int = None) -> Dict[str, Any]:
-        """Move category to new parent"""
         return cls.update(category_id, parent_id=new_parent_id)

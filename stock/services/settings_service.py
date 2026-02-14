@@ -1,6 +1,3 @@
-"""
-Stock Settings Service - Manage system-wide stock settings
-"""
 from typing import Dict, Any, Optional
 from django.db import transaction
 
@@ -12,83 +9,65 @@ from stock.services.base_service import (
 
 
 class StockSettingsService(BaseService):
-    """Manage stock system settings (singleton)"""
-    
     model = StockSettings
-    
-    # ==================== CORE SETTINGS ====================
     
     @classmethod
     def load(cls) -> StockSettings:
-        """Get or create the singleton settings instance"""
         return StockSettings.load()
     
     @classmethod
     def is_enabled(cls) -> bool:
-        """Check if stock system is enabled"""
+        """Chexck if stock system is enabled"""
         return cls.load().stock_enabled
     
     @classmethod
     def is_production_enabled(cls) -> bool:
-        """Check if production module is enabled"""
         settings = cls.load()
         return settings.stock_enabled and settings.production_enabled
     
     @classmethod
     def is_purchasing_enabled(cls) -> bool:
-        """Check if purchasing module is enabled"""
         settings = cls.load()
         return settings.stock_enabled and settings.purchasing_enabled
     
     @classmethod
     def is_multi_location_enabled(cls) -> bool:
-        """Check if multi-location is enabled"""
         settings = cls.load()
         return settings.stock_enabled and settings.multi_location_enabled
     
-    # ==================== GET SETTINGS ====================
-    
     @classmethod
     def get_all(cls) -> Dict[str, Any]:
-        """Get all settings as dictionary"""
         settings = cls.load()
         
         return {
-            # Master controls
             "stock_enabled": settings.stock_enabled,
             "production_enabled": settings.production_enabled,
             "purchasing_enabled": settings.purchasing_enabled,
             "multi_location_enabled": settings.multi_location_enabled,
             
-            # Tracking options
             "track_cost": settings.track_cost,
             "track_batches": settings.track_batches,
             "track_expiry": settings.track_expiry,
             "track_serial_numbers": settings.track_serial_numbers,
             
-            # Behavior
             "allow_negative_stock": settings.allow_negative_stock,
             "auto_deduct_on_sale": settings.auto_deduct_on_sale,
             "deduct_on_order_status": settings.deduct_on_order_status,
             "reserve_on_order_create": settings.reserve_on_order_create,
             "auto_create_production": settings.auto_create_production,
             
-            # Costing
             "costing_method": settings.costing_method,
             "include_waste_in_cost": settings.include_waste_in_cost,
             
-            # Alerts
             "low_stock_alert_enabled": settings.low_stock_alert_enabled,
             "expiry_alert_enabled": settings.expiry_alert_enabled,
             "expiry_alert_days": settings.expiry_alert_days,
             "negative_stock_alert": settings.negative_stock_alert,
             
-            # Defaults
             "default_location_id": settings.default_location_id,
             "default_production_location_id": settings.default_production_location_id,
             "default_receiving_location_id": settings.default_receiving_location_id,
             
-            # Approvals
             "require_po_approval": settings.require_po_approval,
             "require_transfer_approval": settings.require_transfer_approval,
             "require_adjustment_approval": settings.require_adjustment_approval,
@@ -97,7 +76,6 @@ class StockSettingsService(BaseService):
     
     @classmethod
     def get_status(cls) -> Dict[str, Any]:
-        """Get quick status overview"""
         settings = cls.load()
         
         return {
@@ -116,54 +94,37 @@ class StockSettingsService(BaseService):
             "allow_negative": settings.allow_negative_stock,
         }
     
-    # ==================== UPDATE SETTINGS ====================
-    
     @classmethod
     @transaction.atomic
     def update(cls, **kwargs) -> Dict[str, Any]:
-        """Update settings with validation"""
         settings = cls.load()
-        
-        # Valid fields that can be updated
         valid_fields = {
-            # Master controls
             "stock_enabled", "production_enabled", "purchasing_enabled", "multi_location_enabled",
-            # Tracking
             "track_cost", "track_batches", "track_expiry", "track_serial_numbers",
-            # Behavior
             "allow_negative_stock", "auto_deduct_on_sale", "deduct_on_order_status",
             "reserve_on_order_create", "auto_create_production",
-            # Costing
             "costing_method", "include_waste_in_cost",
-            # Alerts
             "low_stock_alert_enabled", "expiry_alert_enabled", "expiry_alert_days",
             "negative_stock_alert",
-            # Defaults
             "default_location_id", "default_production_location_id", "default_receiving_location_id",
-            # Approvals
             "require_po_approval", "require_transfer_approval", 
             "require_adjustment_approval", "require_count_approval",
         }
         
-        # Validate costing method
         if "costing_method" in kwargs:
             valid_methods = [c[0] for c in StockSettings.CostingMethod.choices]
             if kwargs["costing_method"] not in valid_methods:
                 raise ValidationError(f"Invalid costing method. Valid: {valid_methods}", "costing_method")
         
-        # Validate deduct_on_order_status
         if "deduct_on_order_status" in kwargs:
             valid_statuses = ["CREATED", "PREPARING", "READY", "PAID"]
             if kwargs["deduct_on_order_status"] not in valid_statuses:
                 raise ValidationError(f"Invalid status. Valid: {valid_statuses}", "deduct_on_order_status")
-        
-        # Validate location IDs
         for loc_field in ["default_location_id", "default_production_location_id", "default_receiving_location_id"]:
             if loc_field in kwargs and kwargs[loc_field]:
                 if not StockLocation.objects.filter(id=kwargs[loc_field], is_active=True).exists():
                     raise ValidationError(f"Location not found or inactive", loc_field)
         
-        # Apply updates
         updated = []
         for field, value in kwargs.items():
             if field in valid_fields:
@@ -181,7 +142,6 @@ class StockSettingsService(BaseService):
     @classmethod
     @transaction.atomic
     def toggle_stock(cls, enabled: bool) -> Dict[str, Any]:
-        """Enable or disable entire stock system"""
         settings = cls.load()
         settings.stock_enabled = enabled
         settings.save(update_fields=["stock_enabled", "updated_at"])
@@ -193,7 +153,6 @@ class StockSettingsService(BaseService):
     @classmethod
     @transaction.atomic
     def toggle_module(cls, module: str, enabled: bool) -> Dict[str, Any]:
-        """Toggle a specific module"""
         settings = cls.load()
         
         module_fields = {
@@ -214,41 +173,34 @@ class StockSettingsService(BaseService):
             "enabled": enabled
         }, f"{module.replace('_', ' ').title()} module {'enabled' if enabled else 'disabled'}")
     
-    # ==================== DEFAULT LOCATION ====================
     
     @classmethod
     def get_default_location(cls) -> Optional[StockLocation]:
-        """Get default stock location"""
         settings = cls.load()
         return settings.default_location
     
     @classmethod
     def get_default_location_id(cls) -> Optional[int]:
-        """Get default location ID"""
         settings = cls.load()
         return settings.default_location_id
     
     @classmethod
     def get_production_location(cls) -> Optional[StockLocation]:
-        """Get default production location"""
         settings = cls.load()
         return settings.default_production_location
     
     @classmethod
     def get_receiving_location(cls) -> Optional[StockLocation]:
-        """Get default receiving location"""
         settings = cls.load()
         return settings.default_receiving_location
 
 
 class AlertConfigService(BaseService):
-    """Manage alert configurations"""
     
     model = StockAlertConfig
     
     @classmethod
     def get_all(cls) -> Dict[str, Any]:
-        """Get all alert configurations"""
         configs = cls.model.objects.all()
         
         return {
@@ -271,7 +223,6 @@ class AlertConfigService(BaseService):
     
     @classmethod
     def get_by_type(cls, alert_type: str) -> Optional[StockAlertConfig]:
-        """Get config for specific alert type"""
         try:
             return cls.model.objects.get(alert_type=alert_type)
         except cls.model.DoesNotExist:
@@ -280,7 +231,6 @@ class AlertConfigService(BaseService):
     @classmethod
     @transaction.atomic
     def create_or_update(cls, alert_type: str, **kwargs) -> Dict[str, Any]:
-        """Create or update alert configuration"""
         valid_types = [c[0] for c in StockAlertConfig.AlertType.choices]
         if alert_type not in valid_types:
             raise ValidationError(f"Invalid alert type. Valid: {valid_types}", "alert_type")
@@ -310,6 +260,5 @@ class AlertConfigService(BaseService):
     
     @classmethod
     def is_alert_enabled(cls, alert_type: str) -> bool:
-        """Check if specific alert type is enabled"""
         config = cls.get_by_type(alert_type)
         return config.is_active if config else False
