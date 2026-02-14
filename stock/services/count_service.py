@@ -1,6 +1,3 @@
-"""
-Stock Count Service - Inventory counting and variance management
-"""
 from typing import Dict, Any, Optional, List
 from decimal import Decimal
 from datetime import date
@@ -21,13 +18,10 @@ from base_service import (
 
 
 class VarianceReasonCodeService(BaseService):
-    """Manage variance reason codes"""
-    
     model = VarianceReasonCode
     
     @classmethod
     def serialize(cls, code: VarianceReasonCode) -> Dict[str, Any]:
-        """Serialize variance code"""
         return {
             "id": code.id,
             "uuid": str(code.uuid),
@@ -40,7 +34,6 @@ class VarianceReasonCodeService(BaseService):
     
     @classmethod
     def list(cls, active_only: bool = True) -> Dict[str, Any]:
-        """List all variance codes"""
         queryset = cls.model.objects.all()
         
         if active_only:
@@ -60,7 +53,6 @@ class VarianceReasonCodeService(BaseService):
                name: str,
                description: str = "",
                requires_approval: bool = False) -> Dict[str, Any]:
-        """Create variance code"""
         
         if cls.model.objects.filter(code=code).exists():
             raise ValidationError(f"Code '{code}' already exists", "code")
@@ -80,7 +72,6 @@ class VarianceReasonCodeService(BaseService):
     @classmethod
     @transaction.atomic
     def update(cls, code_id: int, **kwargs) -> Dict[str, Any]:
-        """Update variance code"""
         try:
             reason_code = cls.model.objects.get(id=code_id)
         except cls.model.DoesNotExist:
@@ -98,7 +89,6 @@ class VarianceReasonCodeService(BaseService):
     
     @classmethod
     def get_default_codes(cls) -> List[Dict]:
-        """Get list of default variance codes to seed"""
         return [
             {"code": "DAMAGE", "name": "Damaged", "description": "Item damaged", "requires_approval": True},
             {"code": "THEFT", "name": "Theft", "description": "Suspected theft", "requires_approval": True},
@@ -113,7 +103,6 @@ class VarianceReasonCodeService(BaseService):
     @classmethod
     @transaction.atomic
     def seed_defaults(cls) -> Dict[str, Any]:
-        """Seed default variance codes"""
         created = 0
         for code_data in cls.get_default_codes():
             if not cls.model.objects.filter(code=code_data["code"]).exists():
@@ -126,15 +115,10 @@ class VarianceReasonCodeService(BaseService):
 
 
 class StockCountService(BaseService):
-    """Manage stock counts"""
-    
     model = StockCount
-    
-    # ==================== SERIALIZATION ====================
     
     @classmethod
     def serialize(cls, count: StockCount, include_items: bool = False) -> Dict[str, Any]:
-        """Convert count to dictionary"""
         data = {
             "id": count.id,
             "uuid": str(count.uuid),
@@ -200,8 +184,6 @@ class StockCountService(BaseService):
             "created_at": count.created_at.isoformat(),
         }
     
-    # ==================== LIST ====================
-    
     @classmethod
     def list(cls,
              page: int = 1,
@@ -211,7 +193,6 @@ class StockCountService(BaseService):
              count_type: str = None,
              date_from: date = None,
              date_to: date = None) -> Dict[str, Any]:
-        """List stock counts"""
         queryset = cls.model.objects.select_related("location", "category_filter")
         
         if location_id:
@@ -242,7 +223,6 @@ class StockCountService(BaseService):
     
     @classmethod
     def get_active(cls, location_id: int = None) -> Dict[str, Any]:
-        """Get active counts (in progress)"""
         queryset = cls.model.objects.filter(
             status__in=["DRAFT", "IN_PROGRESS"]
         ).select_related("location")
@@ -255,11 +235,8 @@ class StockCountService(BaseService):
             "count": queryset.count()
         })
     
-    # ==================== GET SINGLE ====================
-    
     @classmethod
     def get(cls, count_id: int, include_items: bool = True) -> Dict[str, Any]:
-        """Get single count"""
         count = cls.model.objects.select_related(
             "location", "category_filter"
         ).filter(id=count_id).first()
@@ -271,8 +248,6 @@ class StockCountService(BaseService):
             "count": cls.serialize(count, include_items=include_items)
         })
     
-    # ==================== CREATE ====================
-    
     @classmethod
     @transaction.atomic
     def create(cls,
@@ -283,9 +258,6 @@ class StockCountService(BaseService):
                auto_adjust: bool = False,
                notes: str = "",
                include_zero_stock: bool = True) -> Dict[str, Any]:
-        """Create new stock count and populate items"""
-        
-        # Validate location
         try:
             location = StockLocation.objects.get(id=location_id, is_active=True)
         except StockLocation.DoesNotExist:
@@ -296,7 +268,6 @@ class StockCountService(BaseService):
         if count_type not in valid_types:
             raise ValidationError(f"Invalid type. Valid: {valid_types}", "count_type")
         
-        # Validate category
         category = None
         if category_id:
             try:
@@ -304,7 +275,6 @@ class StockCountService(BaseService):
             except StockCategory.DoesNotExist:
                 raise NotFoundError("Category", category_id)
         
-        # Check for existing active count at location
         existing = cls.model.objects.filter(
             location=location,
             status__in=["DRAFT", "IN_PROGRESS"]
@@ -315,7 +285,6 @@ class StockCountService(BaseService):
                 f"Active count already exists at this location: {existing.count_number}"
             )
         
-        # Generate number
         count_number = generate_number("CNT", cls.model, "count_number")
         
         count = cls.model.objects.create(
@@ -329,7 +298,6 @@ class StockCountService(BaseService):
             notes=notes,
         )
         
-        # Populate count items based on stock levels
         items_created = cls._populate_count_items(count, include_zero_stock)
         
         return success_response({
@@ -341,18 +309,14 @@ class StockCountService(BaseService):
     
     @classmethod
     def _populate_count_items(cls, count: StockCount, include_zero_stock: bool) -> int:
-        """Populate count with items to be counted"""
-        # Get items at this location
         queryset = StockLevel.objects.filter(
             location=count.location,
             stock_item__is_active=True
         ).select_related("stock_item")
         
-        # Apply category filter
         if count.category_filter:
             queryset = queryset.filter(stock_item__category=count.category_filter)
         
-        # Optionally exclude zero stock
         if not include_zero_stock:
             queryset = queryset.filter(quantity__gt=0)
         
@@ -360,7 +324,6 @@ class StockCountService(BaseService):
         items_created = 0
         
         for level in queryset:
-            # If tracking batches, create item per batch
             if settings.track_batches and level.stock_item.track_batches:
                 batches = StockBatch.objects.filter(
                     stock_item=level.stock_item,
@@ -386,12 +349,9 @@ class StockCountService(BaseService):
         
         return items_created
     
-    # ==================== COUNTING WORKFLOW ====================
-    
     @classmethod
     @transaction.atomic
     def start(cls, count_id: int) -> Dict[str, Any]:
-        """Start counting"""
         count = cls.get_by_id(count_id)
         if not count:
             raise NotFoundError("Stock count", count_id)
@@ -415,7 +375,6 @@ class StockCountService(BaseService):
                      counted_quantity: Decimal,
                      reason_code_id: int = None,
                      notes: str = "") -> Dict[str, Any]:
-        """Record counted quantity for an item"""
         count = cls.get_by_id(count_id)
         if not count:
             raise NotFoundError("Stock count", count_id)
@@ -428,7 +387,6 @@ class StockCountService(BaseService):
         except StockCountItem.DoesNotExist:
             raise NotFoundError("Count item", item_id)
         
-        # Update count status if first count
         if count.status == "DRAFT":
             count.status = StockCount.Status.IN_PROGRESS
             count.started_at = timezone.now()
@@ -436,17 +394,14 @@ class StockCountService(BaseService):
         
         counted_quantity = to_decimal(counted_quantity)
         
-        # Calculate variance
         variance = counted_quantity - item.system_quantity
         variance_percentage = Decimal("0")
         if item.system_quantity != 0:
             variance_percentage = (variance / item.system_quantity) * 100
         
-        # Get unit cost for variance cost calculation
         unit_cost = item.stock_item.avg_cost_price
         variance_cost = variance * unit_cost
         
-        # Validate reason code if provided
         reason_code = None
         if reason_code_id:
             try:
@@ -454,7 +409,6 @@ class StockCountService(BaseService):
             except VarianceReasonCode.DoesNotExist:
                 raise NotFoundError("Reason code", reason_code_id)
         
-        # Update item
         item.counted_quantity = counted_quantity
         item.variance = variance
         item.variance_percentage = round_decimal(variance_percentage, 2)
@@ -470,7 +424,6 @@ class StockCountService(BaseService):
     @classmethod
     @transaction.atomic
     def complete(cls, count_id: int) -> Dict[str, Any]:
-        """Complete counting (submit for approval)"""
         count = cls.get_by_id(count_id)
         if not count:
             raise NotFoundError("Stock count", count_id)
@@ -478,7 +431,6 @@ class StockCountService(BaseService):
         if count.status != "IN_PROGRESS":
             raise BusinessRuleError(f"Can only complete IN_PROGRESS counts")
         
-        # Check all items are counted
         uncounted = count.items.filter(counted_quantity__isnull=True).count()
         if uncounted > 0:
             raise BusinessRuleError(f"{uncounted} item(s) not yet counted")
@@ -488,14 +440,12 @@ class StockCountService(BaseService):
         if settings.require_count_approval:
             count.status = StockCount.Status.PENDING_APPROVAL
         else:
-            # Auto-approve
             count.status = StockCount.Status.APPROVED
             count.approved_by = count.counted_by
         
         count.completed_at = timezone.now()
         count.save(update_fields=["status", "completed_at", "approved_by", "updated_at"])
         
-        # Auto-adjust if enabled and approved
         if count.auto_adjust and count.status == "APPROVED":
             cls._apply_adjustments(count)
         
@@ -506,7 +456,6 @@ class StockCountService(BaseService):
     @classmethod
     @transaction.atomic
     def approve(cls, count_id: int, approved_by_id: int, apply_adjustments: bool = True) -> Dict[str, Any]:
-        """Approve count and optionally apply adjustments"""
         count = cls.get_by_id(count_id)
         if not count:
             raise NotFoundError("Stock count", count_id)
@@ -527,7 +476,6 @@ class StockCountService(BaseService):
     
     @classmethod
     def _apply_adjustments(cls, count: StockCount):
-        """Apply stock adjustments based on count variance"""
         from .level_service import StockLevelService
         
         items_with_variance = count.items.exclude(variance=0).select_related(
@@ -538,17 +486,14 @@ class StockCountService(BaseService):
             if item.variance == 0:
                 continue
             
-            # Determine movement type
             if item.variance > 0:
-                movement_type = "COUNT_ADJUSTMENT"  # Stock found
+                movement_type = "COUNT_ADJUSTMENT" 
             else:
-                movement_type = "COUNT_ADJUSTMENT"  # Stock lost (will be negative adjustment)
+                movement_type = "COUNT_ADJUSTMENT" 
             
-            # Perform adjustment
             result = StockLevelService.adjust(
                 stock_item_id=item.stock_item_id,
                 location_id=count.location_id,
-                quantity=item.variance,  # Can be positive or negative
                 movement_type=movement_type,
                 user_id=count.approved_by_id or count.counted_by_id,
                 batch_id=item.batch_id,
@@ -557,14 +502,12 @@ class StockCountService(BaseService):
                 notes=f"Count adjustment: {count.count_number}"
             )
             
-            # Mark item as adjusted
             item.is_adjusted = True
             if "transaction_id" in result:
                 from stock.models import StockTransaction
                 item.adjustment_transaction_id = result["transaction_id"]
             item.save(update_fields=["is_adjusted", "adjustment_transaction"])
         
-        # Update stock level last_counted_at
         StockLevel.objects.filter(
             location=count.location,
             stock_item__in=count.items.values("stock_item")
@@ -573,7 +516,6 @@ class StockCountService(BaseService):
     @classmethod
     @transaction.atomic
     def cancel(cls, count_id: int, reason: str = "") -> Dict[str, Any]:
-        """Cancel stock count"""
         count = cls.get_by_id(count_id)
         if not count:
             raise NotFoundError("Stock count", count_id)
@@ -593,8 +535,6 @@ class StockCountService(BaseService):
             "count": cls.serialize(count)
         }, "Stock count cancelled")
     
-    # ==================== BLIND COUNT ====================
-    
     @classmethod
     @transaction.atomic
     def create_blind_count(cls,
@@ -602,7 +542,6 @@ class StockCountService(BaseService):
                            counted_by_id: int,
                            count_type: str = "SPOT",
                            notes: str = "") -> Dict[str, Any]:
-        """Create blind count (system quantities hidden from counter)"""
         result = cls.create(
             location_id=location_id,
             count_type=count_type,
@@ -611,20 +550,16 @@ class StockCountService(BaseService):
             include_zero_stock=False,
         )
         
-        # The serialization should hide system_quantity for blind counts
-        # This is typically handled at the API/view level
         
         return result
 
 
 class StockCountItemService(BaseService):
-    """Manage count line items"""
     
     model = StockCountItem
     
     @classmethod
     def serialize(cls, item: StockCountItem, hide_system_qty: bool = False) -> Dict[str, Any]:
-        """Serialize count item"""
         data = {
             "id": item.id,
             "uuid": str(item.uuid),
@@ -643,7 +578,6 @@ class StockCountItemService(BaseService):
             "is_adjusted": item.is_adjusted,
         }
         
-        # For blind counts, hide system quantity until counted
         if hide_system_qty and item.counted_quantity is None:
             data["system_quantity"] = "***"
             data["variance"] = None
@@ -669,7 +603,6 @@ class StockCountItemService(BaseService):
     
     @classmethod
     def get_uncounted(cls, count_id: int) -> Dict[str, Any]:
-        """Get uncounted items"""
         items = cls.model.objects.filter(
             stock_count_id=count_id,
             counted_quantity__isnull=True
@@ -682,7 +615,6 @@ class StockCountItemService(BaseService):
     
     @classmethod
     def get_with_variance(cls, count_id: int) -> Dict[str, Any]:
-        """Get items with variance"""
         items = cls.model.objects.filter(
             stock_count_id=count_id,
             counted_quantity__isnull=False

@@ -1,6 +1,3 @@
-"""
-Stock Unit Service - Manage units of measure with conversions
-"""
 from typing import Dict, Any, Optional, List, Tuple
 from decimal import Decimal
 from django.db import transaction
@@ -15,15 +12,9 @@ from stock.services.base_service import (
 
 
 class StockUnitService(BaseService):
-    """Manage units of measure"""
-    
     model = StockUnit
     
-    # ==================== SERIALIZATION ====================
-    
-    @classmethod
     def serialize(cls, unit: StockUnit, include_derived: bool = False) -> Dict[str, Any]:
-        """Convert unit to dictionary"""
         data = {
             "id": unit.id,
             "uuid": str(unit.uuid),
@@ -59,14 +50,11 @@ class StockUnitService(BaseService):
         
         return data
     
-    # ==================== LIST & SEARCH ====================
-    
     @classmethod
     def list(cls, 
              include_inactive: bool = False,
              type_filter: str = None,
              base_only: bool = False) -> Dict[str, Any]:
-        """List all units"""
         queryset = cls.model.objects.all()
         
         if not include_inactive:
@@ -80,7 +68,6 @@ class StockUnitService(BaseService):
         
         queryset = queryset.order_by("unit_type", "name")
         
-        # Group by type
         units_by_type = {}
         all_units = []
         
@@ -104,7 +91,6 @@ class StockUnitService(BaseService):
     
     @classmethod
     def get_by_type(cls, unit_type: str) -> Dict[str, Any]:
-        """Get all units of a specific type"""
         valid_types = [c[0] for c in StockUnit.UnitType.choices]
         if unit_type not in valid_types:
             raise ValidationError(f"Invalid type. Valid: {valid_types}", "unit_type")
@@ -114,7 +100,6 @@ class StockUnitService(BaseService):
             is_active=True
         ).order_by("-is_base_unit", "name")
         
-        # Find base unit for this type
         base_unit = units.filter(is_base_unit=True).first()
         
         return success_response({
@@ -125,7 +110,6 @@ class StockUnitService(BaseService):
     
     @classmethod
     def search(cls, query: str, limit: int = 20) -> Dict[str, Any]:
-        """Search units"""
         units = cls.model.objects.filter(
             Q(name__icontains=query) | Q(short_name__icontains=query),
             is_active=True
@@ -136,11 +120,9 @@ class StockUnitService(BaseService):
             "count": units.count()
         })
     
-    # ==================== GET SINGLE ====================
     
     @classmethod
     def get(cls, unit_id: int, include_derived: bool = True) -> Dict[str, Any]:
-        """Get single unit"""
         unit = cls.get_by_id(unit_id)
         if not unit:
             raise NotFoundError("Unit", unit_id)
@@ -151,14 +133,11 @@ class StockUnitService(BaseService):
     
     @classmethod
     def get_base_unit(cls, unit_type: str) -> Optional[StockUnit]:
-        """Get base unit for a type"""
         return cls.model.objects.filter(
             unit_type=unit_type,
             is_base_unit=True,
             is_active=True
         ).first()
-    
-    # ==================== CREATE ====================
     
     @classmethod
     @transaction.atomic
@@ -170,21 +149,16 @@ class StockUnitService(BaseService):
                base_unit_id: int = None,
                conversion_factor: Decimal = Decimal("1"),
                decimal_places: int = 2) -> Dict[str, Any]:
-        """Create new unit"""
         
-        # Validate type
         valid_types = [c[0] for c in StockUnit.UnitType.choices]
         if unit_type not in valid_types:
             raise ValidationError(f"Invalid type. Valid: {valid_types}", "unit_type")
         
-        # Check duplicate
         if cls.model.objects.filter(short_name__iexact=short_name).exists():
             raise ValidationError(f"Unit with short name '{short_name}' already exists", "short_name")
         
-        # Base unit validation
         base_unit = None
         if is_base_unit:
-            # Check if base unit already exists for this type
             existing_base = cls.get_base_unit(unit_type)
             if existing_base:
                 raise BusinessRuleError(f"Base unit already exists for {unit_type}: {existing_base.name}")
@@ -198,7 +172,6 @@ class StockUnitService(BaseService):
             if not base_unit.is_base_unit:
                 raise ValidationError("Referenced unit is not a base unit", "base_unit_id")
         else:
-            # Auto-find base unit
             base_unit = cls.get_base_unit(unit_type)
             if not base_unit:
                 raise BusinessRuleError(f"No base unit exists for {unit_type}. Create base unit first.")
@@ -219,27 +192,21 @@ class StockUnitService(BaseService):
             "unit": cls.serialize(unit)
         }, f"Unit '{name}' created")
     
-    # ==================== UPDATE ====================
-    
     @classmethod
     @transaction.atomic
     def update(cls, unit_id: int, **kwargs) -> Dict[str, Any]:
-        """Update unit"""
         unit = cls.get_by_id(unit_id)
         if not unit:
             raise NotFoundError("Unit", unit_id)
         
-        # Check short_name uniqueness
         if "short_name" in kwargs and kwargs["short_name"] != unit.short_name:
             if cls.model.objects.filter(short_name__iexact=kwargs["short_name"]).exclude(id=unit_id).exists():
                 raise ValidationError(f"Unit with short name '{kwargs['short_name']}' already exists", "short_name")
         
-        # Can't change unit_type if base unit has derived units
         if "unit_type" in kwargs and kwargs["unit_type"] != unit.unit_type:
             if unit.is_base_unit and unit.derived_units.exists():
                 raise BusinessRuleError("Cannot change type of base unit with derived units")
         
-        # Update fields
         update_fields = []
         for field in ["name", "short_name", "conversion_factor", "decimal_places"]:
             if field in kwargs:
@@ -253,21 +220,17 @@ class StockUnitService(BaseService):
             "unit": cls.serialize(unit)
         }, "Unit updated")
     
-    # ==================== DELETE / DEACTIVATE ====================
     
     @classmethod
     @transaction.atomic
     def deactivate(cls, unit_id: int) -> Dict[str, Any]:
-        """Deactivate unit"""
         unit = cls.get_by_id(unit_id)
         if not unit:
             raise NotFoundError("Unit", unit_id)
         
-        # Check if used by stock items
         if StockItem.objects.filter(base_unit=unit).exists():
             raise BusinessRuleError("Cannot deactivate unit used by stock items")
         
-        # Check if base unit with derived units
         if unit.is_base_unit and unit.derived_units.filter(is_active=True).exists():
             raise BusinessRuleError("Cannot deactivate base unit with active derived units")
         
@@ -278,17 +241,12 @@ class StockUnitService(BaseService):
             "id": unit_id
         }, "Unit deactivated")
     
-    # ==================== CONVERSION ====================
-    
     @classmethod
     def convert(cls, 
                 quantity: Decimal, 
                 from_unit_id: int, 
                 to_unit_id: int) -> Tuple[Decimal, Dict[str, Any]]:
-        """
-        Convert quantity from one unit to another.
-        Returns: (converted_quantity, details)
-        """
+
         from_unit = cls.get_by_id(from_unit_id)
         to_unit = cls.get_by_id(to_unit_id)
         
@@ -297,7 +255,6 @@ class StockUnitService(BaseService):
         if not to_unit:
             raise NotFoundError("To unit", to_unit_id)
         
-        # Must be same type
         if from_unit.unit_type != to_unit.unit_type:
             raise BusinessRuleError(
                 f"Cannot convert between different types: {from_unit.unit_type} → {to_unit.unit_type}"
@@ -305,7 +262,6 @@ class StockUnitService(BaseService):
         
         quantity = to_decimal(quantity)
         
-        # Convert to base first, then to target
         if from_unit.is_base_unit:
             base_quantity = quantity
         else:
@@ -330,7 +286,6 @@ class StockUnitService(BaseService):
     
     @classmethod
     def to_base(cls, quantity: Decimal, unit_id: int) -> Tuple[Decimal, StockUnit]:
-        """Convert quantity to base unit"""
         unit = cls.get_by_id(unit_id)
         if not unit:
             raise NotFoundError("Unit", unit_id)
@@ -347,7 +302,6 @@ class StockUnitService(BaseService):
     
     @classmethod
     def from_base(cls, base_quantity: Decimal, to_unit_id: int) -> Decimal:
-        """Convert from base unit to target unit"""
         unit = cls.get_by_id(to_unit_id)
         if not unit:
             raise NotFoundError("Unit", to_unit_id)
@@ -362,13 +316,10 @@ class StockUnitService(BaseService):
 
 
 class StockItemUnitService(BaseService):
-    """Manage alternative units for stock items"""
-    
     model = StockItemUnit
     
     @classmethod
     def serialize(cls, item_unit: StockItemUnit) -> Dict[str, Any]:
-        """Serialize item unit"""
         return {
             "id": item_unit.id,
             "uuid": str(item_unit.uuid),
@@ -386,7 +337,6 @@ class StockItemUnitService(BaseService):
     
     @classmethod
     def get_for_item(cls, stock_item_id: int) -> Dict[str, Any]:
-        """Get all alternative units for a stock item"""
         item_units = cls.model.objects.filter(
             stock_item_id=stock_item_id
         ).select_related("unit").order_by("-is_default", "unit__name")
@@ -404,25 +354,20 @@ class StockItemUnitService(BaseService):
                  conversion_to_base: Decimal,
                  is_default: bool = False,
                  barcode: str = None) -> Dict[str, Any]:
-        """Add alternative unit to stock item"""
         from stock.models import StockItem
         
-        # Validate stock item
         try:
             stock_item = StockItem.objects.get(id=stock_item_id)
         except StockItem.DoesNotExist:
             raise NotFoundError("Stock item", stock_item_id)
         
-        # Validate unit
         unit = StockUnitService.get_by_id(unit_id)
         if not unit:
             raise NotFoundError("Unit", unit_id)
         
-        # Check duplicate
         if cls.model.objects.filter(stock_item_id=stock_item_id, unit_id=unit_id).exists():
             raise ValidationError("This unit is already added to the item", "unit_id")
         
-        # If setting as default, unset others
         if is_default:
             cls.model.objects.filter(stock_item_id=stock_item_id, is_default=True).update(is_default=False)
         
@@ -442,7 +387,6 @@ class StockItemUnitService(BaseService):
     @classmethod
     @transaction.atomic
     def remove_unit(cls, item_unit_id: int) -> Dict[str, Any]:
-        """Remove alternative unit from stock item"""
         try:
             item_unit = cls.model.objects.get(id=item_unit_id)
         except cls.model.DoesNotExist:
@@ -457,8 +401,6 @@ class StockItemUnitService(BaseService):
                          stock_item_id: int,
                          quantity: Decimal,
                          from_unit_id: int) -> Decimal:
-        """Convert quantity to base unit for specific stock item"""
-        # First try item-specific conversion
         try:
             item_unit = cls.model.objects.get(
                 stock_item_id=stock_item_id,
@@ -466,7 +408,6 @@ class StockItemUnitService(BaseService):
             )
             return to_decimal(quantity) * item_unit.conversion_to_base
         except cls.model.DoesNotExist:
-            # Fall back to standard unit conversion
             result, _ = StockUnitService.convert(
                 quantity, 
                 from_unit_id, 

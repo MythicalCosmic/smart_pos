@@ -1,6 +1,3 @@
-"""
-Stock Transfer Service - Manage inter-location stock transfers
-"""
 from typing import Dict, Any, Optional, List
 from decimal import Decimal
 from datetime import date, timedelta
@@ -20,15 +17,12 @@ from base_service import (
 
 
 class StockTransferService(BaseService):
-    """Manage stock transfers between locations"""
     
     model = StockTransfer
     
-    # ==================== SERIALIZATION ====================
     
     @classmethod
     def serialize(cls, transfer: StockTransfer, include_items: bool = False) -> Dict[str, Any]:
-        """Convert transfer to dictionary"""
         data = {
             "id": transfer.id,
             "uuid": str(transfer.uuid),
@@ -79,7 +73,6 @@ class StockTransferService(BaseService):
     
     @classmethod
     def serialize_brief(cls, transfer: StockTransfer) -> Dict[str, Any]:
-        """Brief serialization"""
         return {
             "id": transfer.id,
             "transfer_number": transfer.transfer_number,
@@ -88,8 +81,6 @@ class StockTransferService(BaseService):
             "status": transfer.status,
             "created_at": transfer.created_at.isoformat(),
         }
-    
-    # ==================== LIST & SEARCH ====================
     
     @classmethod
     def list(cls,
@@ -101,7 +92,6 @@ class StockTransferService(BaseService):
              transfer_type: str = None,
              date_from: date = None,
              date_to: date = None) -> Dict[str, Any]:
-        """List transfers with filters"""
         queryset = cls.model.objects.select_related("from_location", "to_location")
         
         if from_location_id:
@@ -135,7 +125,6 @@ class StockTransferService(BaseService):
     
     @classmethod
     def get_pending(cls, location_id: int = None) -> Dict[str, Any]:
-        """Get pending transfers (not completed/cancelled)"""
         queryset = cls.model.objects.filter(
             status__in=["DRAFT", "REQUESTED", "APPROVED", "IN_TRANSIT"]
         ).select_related("from_location", "to_location")
@@ -152,7 +141,6 @@ class StockTransferService(BaseService):
     
     @classmethod
     def get_incoming(cls, location_id: int) -> Dict[str, Any]:
-        """Get incoming transfers for a location"""
         transfers = cls.model.objects.filter(
             to_location_id=location_id,
             status__in=["APPROVED", "IN_TRANSIT"]
@@ -165,7 +153,6 @@ class StockTransferService(BaseService):
     
     @classmethod
     def get_outgoing(cls, location_id: int) -> Dict[str, Any]:
-        """Get outgoing transfers from a location"""
         transfers = cls.model.objects.filter(
             from_location_id=location_id,
             status__in=["REQUESTED", "APPROVED", "IN_TRANSIT"]
@@ -176,11 +163,9 @@ class StockTransferService(BaseService):
             "count": transfers.count()
         })
     
-    # ==================== GET SINGLE ====================
     
     @classmethod
     def get(cls, transfer_id: int, include_items: bool = True) -> Dict[str, Any]:
-        """Get single transfer"""
         transfer = cls.model.objects.select_related(
             "from_location", "to_location"
         ).filter(id=transfer_id).first()
@@ -192,7 +177,6 @@ class StockTransferService(BaseService):
             "transfer": cls.serialize(transfer, include_items=include_items)
         })
     
-    # ==================== CREATE ====================
     
     @classmethod
     @transaction.atomic
@@ -203,9 +187,7 @@ class StockTransferService(BaseService):
                transfer_type: str = "INTERNAL",
                notes: str = "",
                items: List[Dict] = None) -> Dict[str, Any]:
-        """Create new transfer"""
         
-        # Validate locations
         try:
             from_location = StockLocation.objects.get(id=from_location_id, is_active=True)
         except StockLocation.DoesNotExist:
@@ -219,12 +201,10 @@ class StockTransferService(BaseService):
         if from_location_id == to_location_id:
             raise ValidationError("Cannot transfer to same location", "to_location_id")
         
-        # Validate transfer type
         valid_types = [c[0] for c in StockTransfer.TransferType.choices]
         if transfer_type not in valid_types:
             raise ValidationError(f"Invalid type. Valid: {valid_types}", "transfer_type")
         
-        # Generate number
         transfer_number = generate_number("TRF", cls.model, "transfer_number")
         
         transfer = cls.model.objects.create(
@@ -237,7 +217,6 @@ class StockTransferService(BaseService):
             notes=notes,
         )
         
-        # Add items if provided
         if items:
             for item_data in items:
                 StockTransferItemService.add_item(
@@ -254,12 +233,10 @@ class StockTransferService(BaseService):
             "transfer": cls.serialize(transfer, include_items=True)
         }, f"Transfer {transfer_number} created")
     
-    # ==================== UPDATE ====================
     
     @classmethod
     @transaction.atomic
     def update(cls, transfer_id: int, **kwargs) -> Dict[str, Any]:
-        """Update transfer"""
         transfer = cls.get_by_id(transfer_id)
         if not transfer:
             raise NotFoundError("Transfer", transfer_id)
@@ -269,7 +246,6 @@ class StockTransferService(BaseService):
         
         update_fields = ["updated_at"]
         
-        # Update locations
         if "from_location_id" in kwargs:
             try:
                 location = StockLocation.objects.get(id=kwargs["from_location_id"], is_active=True)
@@ -296,12 +272,10 @@ class StockTransferService(BaseService):
             "transfer": cls.serialize(transfer, include_items=True)
         }, "Transfer updated")
     
-    # ==================== STATUS WORKFLOW ====================
     
     @classmethod
     @transaction.atomic
     def request(cls, transfer_id: int) -> Dict[str, Any]:
-        """Submit transfer request"""
         transfer = cls.get_by_id(transfer_id)
         if not transfer:
             raise NotFoundError("Transfer", transfer_id)
@@ -323,18 +297,15 @@ class StockTransferService(BaseService):
     @classmethod
     @transaction.atomic
     def approve(cls, transfer_id: int, approved_by_id: int) -> Dict[str, Any]:
-        """Approve transfer"""
         transfer = cls.get_by_id(transfer_id)
         if not transfer:
             raise NotFoundError("Transfer", transfer_id)
         
         settings = StockSettings.load()
         
-        # Can approve from DRAFT (skip request) or REQUESTED
         if transfer.status not in ["DRAFT", "REQUESTED"]:
             raise BusinessRuleError(f"Cannot approve {transfer.status} transfer")
         
-        # Check stock availability
         for item in transfer.items.all():
             available = StockLevel.objects.filter(
                 stock_item_id=item.stock_item_id,
@@ -348,7 +319,6 @@ class StockTransferService(BaseService):
                     available
                 )
             
-            # Set approved qty
             item.approved_qty = item.requested_qty
             item.save(update_fields=["approved_qty"])
         
@@ -376,7 +346,6 @@ class StockTransferService(BaseService):
         
         from .level_service import StockLevelService
         
-        # Deduct from source location
         for item in transfer.items.select_related("stock_item", "unit"):
             qty = item.approved_qty or item.requested_qty
             
@@ -407,7 +376,6 @@ class StockTransferService(BaseService):
     @transaction.atomic
     def receive(cls, transfer_id: int, received_by_id: int,
                 received_quantities: Dict[int, Decimal] = None) -> Dict[str, Any]:
-        """Receive transfer (add to destination location)"""
         transfer = cls.get_by_id(transfer_id)
         if not transfer:
             raise NotFoundError("Transfer", transfer_id)
@@ -417,9 +385,7 @@ class StockTransferService(BaseService):
         
         from .level_service import StockLevelService
         
-        # Add to destination location
         for item in transfer.items.select_related("stock_item", "unit"):
-            # Allow partial receiving
             if received_quantities and item.id in received_quantities:
                 qty = to_decimal(received_quantities[item.id])
             else:
@@ -438,7 +404,6 @@ class StockTransferService(BaseService):
             
             item.received_qty = qty
             
-            # Check for variance
             shipped = item.shipped_qty or item.approved_qty or item.requested_qty
             if qty != shipped:
                 item.variance_reason = f"Shipped: {shipped}, Received: {qty}"
@@ -457,7 +422,6 @@ class StockTransferService(BaseService):
     @classmethod
     @transaction.atomic
     def cancel(cls, transfer_id: int, reason: str = "") -> Dict[str, Any]:
-        """Cancel transfer"""
         transfer = cls.get_by_id(transfer_id)
         if not transfer:
             raise NotFoundError("Transfer", transfer_id)
@@ -465,11 +429,9 @@ class StockTransferService(BaseService):
         if transfer.status in ["RECEIVED", "CANCELLED"]:
             raise BusinessRuleError(f"Cannot cancel {transfer.status} transfer")
         
-        # If already shipped, need to reverse
         if transfer.status == "IN_TRANSIT":
             from .level_service import StockLevelService
             
-            # Reverse the deduction
             for item in transfer.items.select_related("stock_item"):
                 qty = item.shipped_qty or item.approved_qty or item.requested_qty
                 
@@ -477,7 +439,7 @@ class StockTransferService(BaseService):
                     stock_item_id=item.stock_item_id,
                     location_id=transfer.from_location_id,
                     quantity=qty,
-                    movement_type="TRANSFER_IN",  # Reversing, so it's IN
+                    movement_type="TRANSFER_IN",  
                     user_id=transfer.shipped_by_id or transfer.requested_by_id,
                     transfer_id=transfer.id,
                     notes=f"Transfer cancelled: {reason}"
@@ -492,8 +454,6 @@ class StockTransferService(BaseService):
             "transfer": cls.serialize(transfer)
         }, "Transfer cancelled")
     
-    # ==================== QUICK TRANSFER ====================
-    
     @classmethod
     @transaction.atomic
     def quick_transfer(cls,
@@ -505,9 +465,6 @@ class StockTransferService(BaseService):
                        unit_id: int = None,
                        batch_id: int = None,
                        notes: str = "") -> Dict[str, Any]:
-        """Perform immediate transfer without approval workflow"""
-        
-        # Create transfer
         result = cls.create(
             from_location_id=from_location_id,
             to_location_id=to_location_id,
@@ -523,7 +480,6 @@ class StockTransferService(BaseService):
         
         transfer_id = result["id"]
         
-        # Approve and ship immediately
         cls.approve(transfer_id, user_id)
         cls.ship(transfer_id, user_id)
         cls.receive(transfer_id, user_id)
@@ -532,13 +488,11 @@ class StockTransferService(BaseService):
 
 
 class StockTransferItemService(BaseService):
-    """Manage transfer line items"""
     
     model = StockTransferItem
     
     @classmethod
     def serialize(cls, item: StockTransferItem) -> Dict[str, Any]:
-        """Serialize transfer item"""
         return {
             "id": item.id,
             "uuid": str(item.uuid),
@@ -567,9 +521,7 @@ class StockTransferItemService(BaseService):
                  requested_qty: Decimal,
                  unit_id: int = None,
                  batch_id: int = None) -> Dict[str, Any]:
-        """Add item to transfer"""
         
-        # Validate transfer
         try:
             transfer = StockTransfer.objects.get(id=transfer_id)
         except StockTransfer.DoesNotExist:
@@ -578,13 +530,11 @@ class StockTransferItemService(BaseService):
         if transfer.status not in ["DRAFT", "REQUESTED"]:
             raise BusinessRuleError("Cannot add items to approved/shipped transfer")
         
-        # Validate stock item
         try:
             stock_item = StockItem.objects.get(id=stock_item_id)
         except StockItem.DoesNotExist:
             raise NotFoundError("Stock item", stock_item_id)
         
-        # Validate unit
         if unit_id:
             try:
                 unit = StockUnit.objects.get(id=unit_id)
@@ -593,7 +543,6 @@ class StockTransferItemService(BaseService):
         else:
             unit = stock_item.base_unit
         
-        # Validate batch
         batch = None
         if batch_id:
             try:
@@ -605,7 +554,6 @@ class StockTransferItemService(BaseService):
             except StockBatch.DoesNotExist:
                 raise NotFoundError("Batch", batch_id)
         
-        # Check if item already exists
         existing = cls.model.objects.filter(
             transfer=transfer,
             stock_item=stock_item,
@@ -613,7 +561,6 @@ class StockTransferItemService(BaseService):
         ).first()
         
         if existing:
-            # Update quantity
             existing.requested_qty += to_decimal(requested_qty)
             existing.save(update_fields=["requested_qty"])
             return success_response({
@@ -636,7 +583,6 @@ class StockTransferItemService(BaseService):
     @classmethod
     @transaction.atomic
     def update_item(cls, item_id: int, **kwargs) -> Dict[str, Any]:
-        """Update transfer item"""
         try:
             item = cls.model.objects.select_related("transfer").get(id=item_id)
         except cls.model.DoesNotExist:
@@ -657,7 +603,6 @@ class StockTransferItemService(BaseService):
     @classmethod
     @transaction.atomic
     def remove_item(cls, item_id: int) -> Dict[str, Any]:
-        """Remove item from transfer"""
         try:
             item = cls.model.objects.select_related("transfer").get(id=item_id)
         except cls.model.DoesNotExist:

@@ -1,6 +1,3 @@
-"""
-Stock Level and Transaction Service - Core stock operations
-"""
 from typing import Dict, Any, Optional, List, Tuple
 from decimal import Decimal
 from datetime import datetime, date, timedelta
@@ -19,16 +16,11 @@ from stock.services.base_service import (
 )
 
 
-class StockLevelService(BaseService):
-    """Manage stock levels"""
-    
+class StockLevelService(BaseService):    
     model = StockLevel
-    
-    # ==================== SERIALIZATION ====================
     
     @classmethod
     def serialize(cls, level: StockLevel) -> Dict[str, Any]:
-        """Convert level to dictionary"""
         return {
             "id": level.id,
             "uuid": str(level.uuid),
@@ -55,8 +47,6 @@ class StockLevelService(BaseService):
             "last_movement_at": level.last_movement_at.isoformat() if level.last_movement_at else None,
         }
     
-    # ==================== GET LEVELS ====================
-    
     @classmethod
     def get_all(cls,
                 location_id: int = None,
@@ -65,7 +55,6 @@ class StockLevelService(BaseService):
                 low_stock_only: bool = False,
                 page: int = 1,
                 per_page: int = 50) -> Dict[str, Any]:
-        """Get all stock levels with filters"""
         queryset = cls.model.objects.select_related(
             "stock_item", "stock_item__base_unit", "stock_item__category", "location"
         ).filter(stock_item__is_active=True)
@@ -95,7 +84,6 @@ class StockLevelService(BaseService):
     
     @classmethod
     def get_for_item(cls, stock_item_id: int) -> Dict[str, Any]:
-        """Get all stock levels for an item across locations"""
         levels = cls.model.objects.filter(
             stock_item_id=stock_item_id
         ).select_related("location").order_by("location__name")
@@ -114,7 +102,6 @@ class StockLevelService(BaseService):
     
     @classmethod
     def get_for_location(cls, location_id: int) -> Dict[str, Any]:
-        """Get all stock levels at a location"""
         levels = cls.model.objects.filter(
             location_id=location_id,
             stock_item__is_active=True
@@ -129,7 +116,6 @@ class StockLevelService(BaseService):
     
     @classmethod
     def get_level(cls, stock_item_id: int, location_id: int) -> StockLevel:
-        """Get or create stock level for item at location"""
         level, created = cls.model.objects.get_or_create(
             stock_item_id=stock_item_id,
             location_id=location_id,
@@ -142,7 +128,6 @@ class StockLevelService(BaseService):
     
     @classmethod
     def get_available(cls, stock_item_id: int, location_id: int = None) -> Decimal:
-        """Get available quantity (quantity - reserved)"""
         queryset = cls.model.objects.filter(stock_item_id=stock_item_id)
         
         if location_id:
@@ -158,12 +143,8 @@ class StockLevelService(BaseService):
         
         return total - reserved
     
-    # ==================== LOW STOCK ALERTS ====================
-    
     @classmethod
     def get_low_stock_items(cls, location_id: int = None) -> Dict[str, Any]:
-        """Get items below reorder point"""
-        # Aggregate stock across locations or for specific location
         if location_id:
             low_stock = cls.model.objects.filter(
                 location_id=location_id,
@@ -171,7 +152,6 @@ class StockLevelService(BaseService):
                 stock_item__is_active=True
             ).select_related("stock_item", "location")
         else:
-            # Total across all locations
             low_stock = StockItem.objects.filter(
                 is_active=True
             ).annotate(
@@ -211,8 +191,6 @@ class StockLevelService(BaseService):
             "count": len(alerts)
         })
     
-    # ==================== STOCK ADJUSTMENTS ====================
-    
     @classmethod
     @transaction.atomic
     def adjust(cls,
@@ -230,37 +208,28 @@ class StockLevelService(BaseService):
                transfer_id: int = None,
                unit_cost: Decimal = None,
                notes: str = "") -> Dict[str, Any]:
-        """
-        Core stock adjustment method.
-        Positive quantity = stock in, Negative = stock out
-        """
         settings = StockSettings.load()
         
-        # If stock system disabled, return success without action
         if not settings.stock_enabled:
             return success_response({
                 "skipped": True,
                 "reason": "Stock system disabled"
             }, "Stock adjustment skipped (system disabled)")
         
-        # Validate movement type
         valid_types = [c[0] for c in StockTransaction.MovementType.choices]
         if movement_type not in valid_types:
             raise ValidationError(f"Invalid movement type. Valid: {valid_types}", "movement_type")
         
-        # Get stock item
         try:
             stock_item = StockItem.objects.get(id=stock_item_id)
         except StockItem.DoesNotExist:
             raise NotFoundError("Stock item", stock_item_id)
         
-        # Get location
         try:
             location = StockLocation.objects.get(id=location_id)
         except StockLocation.DoesNotExist:
             raise NotFoundError("Location", location_id)
         
-        # Get unit (default to base unit)
         if unit_id:
             try:
                 unit = StockUnit.objects.get(id=unit_id)
@@ -271,7 +240,6 @@ class StockLevelService(BaseService):
         
         quantity = to_decimal(quantity)
         
-        # Convert to base unit if necessary
         if unit_id and unit_id != stock_item.base_unit_id:
             from .unit_service import StockItemUnitService
             base_quantity = StockItemUnitService.convert_for_item(
@@ -280,23 +248,19 @@ class StockLevelService(BaseService):
         else:
             base_quantity = quantity
         
-        # Get or create stock level
         level = cls.get_level(stock_item_id, location_id)
         quantity_before = level.quantity
         
-        # Determine if this is adding or removing stock
         is_outgoing = movement_type in [
             "SALE_OUT", "TRANSFER_OUT", "PRODUCTION_OUT",
             "ADJUSTMENT_MINUS", "WASTE", "SPOILAGE", "RETURN_TO_SUPPLIER"
         ]
         
         if is_outgoing:
-            # Make quantity negative for outgoing
             adjustment = -abs(base_quantity)
         else:
             adjustment = abs(base_quantity)
         
-        # Check for negative stock
         new_quantity = level.quantity + adjustment
         if new_quantity < 0 and not settings.allow_negative_stock:
             raise InsufficientStockError(
@@ -305,7 +269,6 @@ class StockLevelService(BaseService):
                 level.quantity
             )
         
-        # Update level
         level.quantity = new_quantity
         level.last_movement_at = timezone.now()
         
@@ -314,11 +277,9 @@ class StockLevelService(BaseService):
         
         level.save(update_fields=["quantity", "last_movement_at", "last_restocked_at", "updated_at"])
         
-        # Determine unit cost
         if unit_cost is None:
             unit_cost = stock_item.avg_cost_price
         
-        # Create transaction record
         trans_number = generate_number("TRX", StockTransaction, "transaction_number")
         
         trans = StockTransaction.objects.create(
@@ -352,7 +313,6 @@ class StockLevelService(BaseService):
             "movement_type": movement_type,
         }, f"Stock adjusted: {adjustment:+} {stock_item.base_unit.short_name}")
     
-    # ==================== RESERVE / RELEASE ====================
     
     @classmethod
     @transaction.atomic
@@ -364,7 +324,6 @@ class StockLevelService(BaseService):
                 reference_type: str = None,
                 reference_id: int = None,
                 notes: str = "") -> Dict[str, Any]:
-        """Reserve stock for an order/transfer"""
         settings = StockSettings.load()
         if not settings.stock_enabled:
             return success_response({"skipped": True})
@@ -382,7 +341,6 @@ class StockLevelService(BaseService):
         level.reserved_quantity += quantity
         level.save(update_fields=["reserved_quantity", "updated_at"])
         
-        # Create reservation transaction
         stock_item = StockItem.objects.get(id=stock_item_id)
         trans_number = generate_number("TRX", StockTransaction, "transaction_number")
         
@@ -395,7 +353,7 @@ class StockLevelService(BaseService):
             unit=stock_item.base_unit,
             base_quantity=quantity,
             quantity_before=level.quantity,
-            quantity_after=level.quantity,  # Level doesn't change, only reserved
+            quantity_after=level.quantity, 
             user_id=user_id,
             reference_type=reference_type or "",
             reference_id=reference_id,
@@ -416,7 +374,6 @@ class StockLevelService(BaseService):
                            quantity: Decimal,
                            user_id: int,
                            notes: str = "") -> Dict[str, Any]:
-        """Release previously reserved stock"""
         settings = StockSettings.load()
         if not settings.stock_enabled:
             return success_response({"skipped": True})
@@ -424,13 +381,11 @@ class StockLevelService(BaseService):
         quantity = abs(to_decimal(quantity))
         level = cls.get_level(stock_item_id, location_id)
         
-        # Can't release more than reserved
         release_qty = min(quantity, level.reserved_quantity)
         
         level.reserved_quantity -= release_qty
         level.save(update_fields=["reserved_quantity", "updated_at"])
         
-        # Create release transaction
         stock_item = StockItem.objects.get(id=stock_item_id)
         trans_number = generate_number("TRX", StockTransaction, "transaction_number")
         
@@ -455,15 +410,10 @@ class StockLevelService(BaseService):
 
 
 class StockTransactionService(BaseService):
-    """Manage stock transactions (history)"""
-    
     model = StockTransaction
-    
-    # ==================== SERIALIZATION ====================
     
     @classmethod
     def serialize(cls, trans: StockTransaction) -> Dict[str, Any]:
-        """Convert transaction to dictionary"""
         return {
             "id": trans.id,
             "uuid": str(trans.uuid),
@@ -492,8 +442,6 @@ class StockTransactionService(BaseService):
             "created_at": trans.created_at.isoformat(),
         }
     
-    # ==================== LIST TRANSACTIONS ====================
-    
     @classmethod
     def list(cls,
              stock_item_id: int = None,
@@ -506,7 +454,6 @@ class StockTransactionService(BaseService):
              transfer_id: int = None,
              page: int = 1,
              per_page: int = 50) -> Dict[str, Any]:
-        """List transactions with filters"""
         queryset = cls.model.objects.select_related(
             "stock_item", "location", "unit"
         )
@@ -550,7 +497,6 @@ class StockTransactionService(BaseService):
     
     @classmethod
     def get_by_reference(cls, reference_type: str, reference_id: int) -> Dict[str, Any]:
-        """Get transactions by reference"""
         transactions = cls.model.objects.filter(
             reference_type=reference_type,
             reference_id=reference_id
@@ -563,7 +509,6 @@ class StockTransactionService(BaseService):
     
     @classmethod
     def get_item_history(cls, stock_item_id: int, days: int = 30) -> Dict[str, Any]:
-        """Get transaction history for an item"""
         since = timezone.now() - timedelta(days=days)
         
         transactions = cls.model.objects.filter(
@@ -571,7 +516,6 @@ class StockTransactionService(BaseService):
             created_at__gte=since
         ).select_related("location", "unit").order_by("-created_at")
         
-        # Summary by movement type
         summary = transactions.values("movement_type").annotate(
             count=Sum("id"),
             total_qty=Sum("base_quantity")

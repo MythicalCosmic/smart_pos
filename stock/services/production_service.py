@@ -1,7 +1,3 @@
-"""
-Production Order Service - Complete production workflow
-Handles: ProductionOrder, ProductionOrderIngredient, ProductionOrderOutput, ProductionOrderStep
-"""
 from typing import Dict, Any, Optional, List
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -22,24 +18,18 @@ from base_service import (
 
 
 class ProductionOrderService(BaseService):
-    """Manage production orders"""
-    
     model = ProductionOrder
-    
-    # ==================== SERIALIZATION ====================
     
     @classmethod
     def serialize(cls, po: ProductionOrder,
                   include_ingredients: bool = True,
                   include_outputs: bool = True,
                   include_steps: bool = True) -> Dict[str, Any]:
-        """Convert production order to dictionary"""
         data = {
             "id": po.id,
             "uuid": str(po.uuid),
             "order_number": po.order_number,
             
-            # Recipe
             "recipe_id": po.recipe_id,
             "recipe": {
                 "id": po.recipe.id,
@@ -47,31 +37,26 @@ class ProductionOrderService(BaseService):
                 "code": po.recipe.code,
             },
             
-            # Output
             "batch_multiplier": str(po.batch_multiplier),
             "expected_output_qty": str(po.expected_output_qty),
             "actual_output_qty": str(po.actual_output_qty) if po.actual_output_qty else None,
             "output_unit": po.output_unit.short_name,
             
-            # Status
             "status": po.status,
             "status_display": po.get_status_display(),
             "priority": po.priority,
             "priority_display": po.get_priority_display(),
             
-            # Locations
             "source_location_id": po.source_location_id,
             "source_location": po.source_location.name,
             "output_location_id": po.output_location_id,
             "output_location": po.output_location.name,
             
-            # Schedule
             "planned_start": po.planned_start.isoformat() if po.planned_start else None,
             "planned_end": po.planned_end.isoformat() if po.planned_end else None,
             "actual_start": po.actual_start.isoformat() if po.actual_start else None,
             "actual_end": po.actual_end.isoformat() if po.actual_end else None,
             
-            # Users
             "assigned_to_id": po.assigned_to_id,
             "created_by_id": po.created_by_id,
             
@@ -114,7 +99,6 @@ class ProductionOrderService(BaseService):
             "planned_start": po.planned_start.isoformat() if po.planned_start else None,
         }
     
-    # ==================== LIST & SEARCH ====================
     
     @classmethod
     def list(cls,
@@ -128,7 +112,6 @@ class ProductionOrderService(BaseService):
              location_id: int = None,
              date_from: datetime = None,
              date_to: datetime = None) -> Dict[str, Any]:
-        """List production orders with filters"""
         queryset = cls.model.objects.select_related(
             "recipe", "output_unit", "source_location", "output_location"
         )
@@ -175,7 +158,6 @@ class ProductionOrderService(BaseService):
     
     @classmethod
     def get_active(cls, location_id: int = None) -> Dict[str, Any]:
-        """Get active production orders"""
         queryset = cls.model.objects.filter(
             status__in=["PLANNED", "IN_PROGRESS"]
         ).select_related("recipe", "output_unit")
@@ -197,7 +179,6 @@ class ProductionOrderService(BaseService):
                      date_from: datetime,
                      date_to: datetime,
                      location_id: int = None) -> Dict[str, Any]:
-        """Get production schedule for date range"""
         queryset = cls.model.objects.filter(
             planned_start__gte=date_from,
             planned_start__lte=date_to,
@@ -218,11 +199,9 @@ class ProductionOrderService(BaseService):
             }
         })
     
-    # ==================== GET SINGLE ====================
     
     @classmethod
     def get(cls, po_id: int) -> Dict[str, Any]:
-        """Get single production order with full details"""
         po = cls.model.objects.select_related(
             "recipe", "output_unit", "source_location", "output_location"
         ).filter(id=po_id).first()
@@ -233,8 +212,6 @@ class ProductionOrderService(BaseService):
         return success_response({
             "order": cls.serialize(po)
         })
-    
-    # ==================== CREATE ====================
     
     @classmethod
     @transaction.atomic
@@ -250,9 +227,7 @@ class ProductionOrderService(BaseService):
                assigned_to_id: int = None,
                notes: str = "",
                auto_allocate: bool = False) -> Dict[str, Any]:
-        """Create production order from recipe"""
         
-        # Validate recipe
         try:
             recipe = Recipe.objects.select_related(
                 "output_item", "output_unit", "production_location"
@@ -262,13 +237,11 @@ class ProductionOrderService(BaseService):
         
         batch_multiplier = to_decimal(batch_multiplier)
         
-        # Validate batch size
         if recipe.min_batch_size and batch_multiplier < recipe.min_batch_size:
             raise ValidationError(f"Minimum batch multiplier is {recipe.min_batch_size}", "batch_multiplier")
         if recipe.max_batch_size and batch_multiplier > recipe.max_batch_size:
             raise ValidationError(f"Maximum batch multiplier is {recipe.max_batch_size}", "batch_multiplier")
         
-        # Get locations
         settings = StockSettings.load()
         
         if not source_location_id:
@@ -290,16 +263,13 @@ class ProductionOrderService(BaseService):
         except StockLocation.DoesNotExist:
             raise NotFoundError("Output location", output_location_id)
         
-        # Calculate expected output
         expected_output = recipe.output_quantity * batch_multiplier
         if recipe.yield_percentage < 100:
             expected_output = expected_output * recipe.yield_percentage / 100
         
-        # Calculate planned end from recipe time
         if planned_start and not planned_end and recipe.estimated_time_minutes:
             planned_end = planned_start + timedelta(minutes=recipe.estimated_time_minutes)
         
-        # Generate order number
         order_number = generate_number("PROD", cls.model, "order_number")
         
         po = cls.model.objects.create(
@@ -319,12 +289,10 @@ class ProductionOrderService(BaseService):
             notes=notes,
         )
         
-        # Create ingredient records
         for recipe_ing in recipe.ingredients.select_related("stock_item", "unit"):
             planned_qty = recipe_ing.quantity * batch_multiplier
-            if recipe_ing.is_scalable else recipe_ing.quantity
+            if recipe_ing.is_scalable : recipe_ing.quantity
             
-            # Add waste percentage
             if recipe_ing.waste_percentage > 0:
                 planned_qty = planned_qty * (1 + recipe_ing.waste_percentage / 100)
             
@@ -337,7 +305,6 @@ class ProductionOrderService(BaseService):
                 status=ProductionOrderIngredient.IngredientStatus.PENDING,
             )
         
-        # Create step records
         for recipe_step in recipe.steps.all():
             ProductionOrderStep.objects.create(
                 production_order=po,
@@ -345,7 +312,6 @@ class ProductionOrderService(BaseService):
                 status=ProductionOrderStep.StepStatus.PENDING,
             )
         
-        # Auto-allocate ingredients if requested
         if auto_allocate:
             cls._allocate_ingredients(po.id)
         
@@ -361,16 +327,13 @@ class ProductionOrderService(BaseService):
                               output_item_id: int,
                               created_by_id: int,
                               target_quantity: Decimal = None) -> Dict[str, Any]:
-        """Create production order to replenish low stock item"""
         
-        # Find recipe for item
         from .production_service import RecipeService
         recipe = RecipeService.get_active_for_item(output_item_id)
         
         if not recipe:
             raise BusinessRuleError("No active recipe found for this item")
         
-        # Calculate required quantity if not specified
         if not target_quantity:
             from .level_service import StockLevelService
             item = StockItem.objects.get(id=output_item_id)
@@ -378,10 +341,8 @@ class ProductionOrderService(BaseService):
             shortage = item.reorder_point - current
             target_quantity = max(shortage, recipe.output_quantity)
         
-        # Calculate batch multiplier
         batch_multiplier = to_decimal(target_quantity) / recipe.output_quantity
         
-        # Round up to min batch size
         if recipe.min_batch_size and batch_multiplier < recipe.min_batch_size:
             batch_multiplier = recipe.min_batch_size
         
@@ -392,12 +353,9 @@ class ProductionOrderService(BaseService):
             notes="Auto-generated from low stock"
         )
     
-    # ==================== STATUS WORKFLOW ====================
-    
     @classmethod
     @transaction.atomic
     def plan(cls, po_id: int) -> Dict[str, Any]:
-        """Plan production order (DRAFT → PLANNED)"""
         po = cls.get_by_id(po_id)
         if not po:
             raise NotFoundError("Production order", po_id)
@@ -405,7 +363,6 @@ class ProductionOrderService(BaseService):
         if po.status != ProductionOrder.Status.DRAFT:
             raise BusinessRuleError(f"Cannot plan order in {po.status} status")
         
-        # Check ingredient availability
         availability = cls.check_ingredient_availability(po_id)
         
         if not availability["data"]["all_available"]:
@@ -414,7 +371,6 @@ class ProductionOrderService(BaseService):
         po.status = ProductionOrder.Status.PLANNED
         po.save(update_fields=["status", "updated_at"])
         
-        # Allocate ingredients (reserve stock)
         cls._allocate_ingredients(po_id)
         
         return success_response({
@@ -424,7 +380,6 @@ class ProductionOrderService(BaseService):
     @classmethod
     @transaction.atomic
     def start(cls, po_id: int, user_id: int = None) -> Dict[str, Any]:
-        """Start production (PLANNED → IN_PROGRESS)"""
         po = cls.get_by_id(po_id)
         if not po:
             raise NotFoundError("Production order", po_id)
@@ -454,7 +409,6 @@ class ProductionOrderService(BaseService):
                  user_id: int,
                  quality_status: str = "PASSED",
                  notes: str = "") -> Dict[str, Any]:
-        """Complete production (IN_PROGRESS → COMPLETED)"""
         po = cls.get_by_id(po_id)
         if not po:
             raise NotFoundError("Production order", po_id)
@@ -464,13 +418,10 @@ class ProductionOrderService(BaseService):
         
         actual_output_qty = to_decimal(actual_output_qty)
         
-        # Consume ingredients
         cls._consume_ingredients(po_id, user_id)
         
-        # Create output batch and stock
         cls._create_output(po_id, actual_output_qty, user_id, quality_status)
         
-        # Update order
         po.status = ProductionOrder.Status.COMPLETED
         po.actual_output_qty = actual_output_qty
         po.actual_end = timezone.now()
@@ -480,7 +431,6 @@ class ProductionOrderService(BaseService):
         
         po.save(update_fields=["status", "actual_output_qty", "actual_end", "notes", "updated_at"])
         
-        # Calculate variance
         variance = actual_output_qty - po.expected_output_qty
         variance_pct = (variance / po.expected_output_qty * 100) if po.expected_output_qty else 0
         
@@ -495,7 +445,6 @@ class ProductionOrderService(BaseService):
     @classmethod
     @transaction.atomic
     def cancel(cls, po_id: int, reason: str = "") -> Dict[str, Any]:
-        """Cancel production order"""
         po = cls.get_by_id(po_id)
         if not po:
             raise NotFoundError("Production order", po_id)
@@ -503,7 +452,6 @@ class ProductionOrderService(BaseService):
         if po.status in [ProductionOrder.Status.COMPLETED, ProductionOrder.Status.CANCELLED]:
             raise BusinessRuleError(f"Cannot cancel order in {po.status} status")
         
-        # Release allocated ingredients
         if po.status in [ProductionOrder.Status.PLANNED, ProductionOrder.Status.IN_PROGRESS]:
             cls._release_ingredients(po_id)
         
@@ -520,7 +468,6 @@ class ProductionOrderService(BaseService):
     @classmethod
     @transaction.atomic
     def hold(cls, po_id: int, reason: str = "") -> Dict[str, Any]:
-        """Put production on hold"""
         po = cls.get_by_id(po_id)
         if not po:
             raise NotFoundError("Production order", po_id)
@@ -541,7 +488,6 @@ class ProductionOrderService(BaseService):
     @classmethod
     @transaction.atomic
     def resume(cls, po_id: int) -> Dict[str, Any]:
-        """Resume production from hold"""
         po = cls.get_by_id(po_id)
         if not po:
             raise NotFoundError("Production order", po_id)
@@ -549,7 +495,6 @@ class ProductionOrderService(BaseService):
         if po.status != ProductionOrder.Status.ON_HOLD:
             raise BusinessRuleError(f"Cannot resume order in {po.status} status")
         
-        # Determine previous status
         new_status = ProductionOrder.Status.IN_PROGRESS if po.actual_start else ProductionOrder.Status.PLANNED
         
         po.status = new_status
@@ -559,11 +504,9 @@ class ProductionOrderService(BaseService):
             "order": cls.serialize(po)
         }, "Production resumed")
     
-    # ==================== INGREDIENT OPERATIONS ====================
     
     @classmethod
     def check_ingredient_availability(cls, po_id: int) -> Dict[str, Any]:
-        """Check if all ingredients are available"""
         po = cls.get_by_id(po_id)
         if not po:
             raise NotFoundError("Production order", po_id)
@@ -598,7 +541,6 @@ class ProductionOrderService(BaseService):
     @classmethod
     @transaction.atomic
     def _allocate_ingredients(cls, po_id: int):
-        """Allocate (reserve) ingredients"""
         po = cls.get_by_id(po_id)
         if not po:
             return
@@ -622,7 +564,6 @@ class ProductionOrderService(BaseService):
     @classmethod
     @transaction.atomic
     def _release_ingredients(cls, po_id: int):
-        """Release allocated ingredients"""
         po = cls.get_by_id(po_id)
         if not po:
             return
@@ -644,7 +585,6 @@ class ProductionOrderService(BaseService):
     @classmethod
     @transaction.atomic
     def _consume_ingredients(cls, po_id: int, user_id: int):
-        """Consume ingredients from stock"""
         po = cls.get_by_id(po_id)
         if not po:
             return
@@ -654,7 +594,6 @@ class ProductionOrderService(BaseService):
         for ing in po.ingredients.select_related("stock_item"):
             actual_qty = ing.actual_quantity or ing.planned_quantity
             
-            # Use batch service if batch tracking enabled
             if settings.track_batches or ing.stock_item.track_batches:
                 from .batch_service import StockBatchService
                 result = StockBatchService.auto_consume(
@@ -668,7 +607,6 @@ class ProductionOrderService(BaseService):
                     notes=f"Production: {po.order_number}"
                 )
                 
-                # Record which batch was used
                 if result.get("data", {}).get("batches"):
                     first_batch = result["data"]["batches"][0]
                     ing.batch_used_id = first_batch["batch_id"]
@@ -684,7 +622,6 @@ class ProductionOrderService(BaseService):
                     notes=f"Production: {po.order_number}"
                 )
             
-            # Calculate variance
             if ing.actual_quantity:
                 ing.variance = ing.actual_quantity - ing.planned_quantity
             
@@ -694,21 +631,18 @@ class ProductionOrderService(BaseService):
     @classmethod
     @transaction.atomic
     def _create_output(cls, po_id: int, quantity: Decimal, user_id: int, quality_status: str):
-        """Create output product in stock"""
         po = cls.get_by_id(po_id)
         if not po:
             return
         
         settings = StockSettings.load()
         
-        # Calculate cost from consumed ingredients
         total_cost = sum(
             (ing.actual_quantity or ing.planned_quantity) * ing.stock_item.avg_cost_price
             for ing in po.ingredients.select_related("stock_item")
         )
         unit_cost = total_cost / quantity if quantity > 0 else Decimal("0")
         
-        # Create primary output
         batch = None
         if settings.track_batches or po.recipe.output_item.track_batches:
             from .batch_service import StockBatchService
@@ -722,7 +656,6 @@ class ProductionOrderService(BaseService):
             )
             batch = StockBatch.objects.get(id=batch_result["data"]["id"])
         
-        # Add to stock
         from .level_service import StockLevelService
         StockLevelService.adjust(
             stock_item_id=po.recipe.output_item_id,
@@ -736,7 +669,6 @@ class ProductionOrderService(BaseService):
             notes=f"Production output: {po.order_number}"
         )
         
-        # Create output record
         ProductionOrderOutput.objects.create(
             production_order=po,
             stock_item=po.recipe.output_item,
@@ -747,7 +679,6 @@ class ProductionOrderService(BaseService):
             quality_status=quality_status,
         )
         
-        # Create by-product outputs
         for bp in po.recipe.by_products.select_related("stock_item", "unit"):
             bp_qty = bp.expected_quantity * po.batch_multiplier
             
@@ -761,7 +692,6 @@ class ProductionOrderService(BaseService):
                 is_waste=bp.is_waste,
             )
             
-            # Add by-product to stock (unless waste)
             if not bp.is_waste:
                 StockLevelService.adjust(
                     stock_item_id=bp.stock_item_id,
@@ -775,8 +705,6 @@ class ProductionOrderService(BaseService):
 
 
 class ProductionOrderIngredientService(BaseService):
-    """Manage production order ingredients"""
-    
     model = ProductionOrderIngredient
     
     @classmethod
@@ -805,7 +733,6 @@ class ProductionOrderIngredientService(BaseService):
                       actual_quantity: Decimal,
                       batch_id: int = None,
                       variance_reason: str = "") -> Dict[str, Any]:
-        """Record actual quantity used"""
         try:
             ing = cls.model.objects.select_related("production_order").get(id=ingredient_id)
         except cls.model.DoesNotExist:
@@ -829,8 +756,6 @@ class ProductionOrderIngredientService(BaseService):
 
 
 class ProductionOrderOutputService(BaseService):
-    """Manage production order outputs"""
-    
     model = ProductionOrderOutput
     
     @classmethod
@@ -853,7 +778,6 @@ class ProductionOrderOutputService(BaseService):
 
 
 class ProductionOrderStepService(BaseService):
-    """Manage production order steps"""
     
     model = ProductionOrderStep
     
@@ -883,7 +807,6 @@ class ProductionOrderStepService(BaseService):
     @classmethod
     @transaction.atomic
     def start(cls, step_id: int) -> Dict[str, Any]:
-        """Start a production step"""
         try:
             step = cls.model.objects.select_related("production_order").get(id=step_id)
         except cls.model.DoesNotExist:
@@ -909,7 +832,6 @@ class ProductionOrderStepService(BaseService):
                  completed_by_id: int,
                  checkpoint_passed: bool = None,
                  notes: str = "") -> Dict[str, Any]:
-        """Complete a production step"""
         try:
             step = cls.model.objects.select_related("production_order", "recipe_step").get(id=step_id)
         except cls.model.DoesNotExist:
@@ -918,7 +840,6 @@ class ProductionOrderStepService(BaseService):
         if step.status not in [ProductionOrderStep.StepStatus.PENDING, ProductionOrderStep.StepStatus.IN_PROGRESS]:
             raise BusinessRuleError(f"Cannot complete step in {step.status} status")
         
-        # Check checkpoint requirement
         if step.recipe_step.is_checkpoint and checkpoint_passed is None:
             raise ValidationError("Checkpoint steps require checkpoint_passed value", "checkpoint_passed")
         
@@ -940,7 +861,6 @@ class ProductionOrderStepService(BaseService):
     @classmethod
     @transaction.atomic
     def skip(cls, step_id: int, reason: str = "") -> Dict[str, Any]:
-        """Skip a production step"""
         try:
             step = cls.model.objects.select_related("recipe_step").get(id=step_id)
         except cls.model.DoesNotExist:
