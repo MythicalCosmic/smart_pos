@@ -8,7 +8,7 @@ from stock.models import (
     ProductStockLink, ProductComponentStock,
     StockItem, StockUnit, Recipe, StockSettings
 )
-from base_service import (
+from stock.services.base_service import (
     BaseService, success_response, error_response, paginate_queryset,
     ValidationError, NotFoundError, BusinessRuleError,
     to_decimal

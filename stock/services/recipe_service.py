@@ -10,7 +10,7 @@ from stock.models import (
     Recipe, RecipeIngredient, RecipeIngredientSubstitute, RecipeByProduct, RecipeStep,
     StockItem, StockUnit, StockLocation
 )
-from base_service import (
+from stock.services.base_service import (
     BaseService, success_response, error_response, paginate_queryset,
     ValidationError, NotFoundError, BusinessRuleError,
     to_decimal, round_decimal
