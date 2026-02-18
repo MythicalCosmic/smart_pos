@@ -4,7 +4,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from stock.models import StockSettings, ProductStockLink, StockLevel
-from base_service import (
+from stock.services.base_service import (
     BaseService, success_response, error_response,
     ValidationError, NotFoundError, BusinessRuleError, InsufficientStockError,
     to_decimal

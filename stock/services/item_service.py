@@ -148,6 +148,10 @@ class StockItemService(BaseService):
              purchasable_only: bool = False,
              sellable_only: bool = False,
              producible_only: bool = False,
+             is_purchasable: bool = False,
+             is_sellable: bool = False,
+             is_producible: bool = False,
+             low_stock_only: bool = False,
              low_stock: bool = False,
              location_id: int = None,
              include_levels: bool = False) -> Dict[str, Any]:

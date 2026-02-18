@@ -54,6 +54,7 @@ class StockLevelService(BaseService):
                 item_type: str = None,
                 low_stock_only: bool = False,
                 page: int = 1,
+                search: str = None,
                 per_page: int = 50) -> Dict[str, Any]:
         queryset = cls.model.objects.select_related(
             "stock_item", "stock_item__base_unit", "stock_item__category", "location"

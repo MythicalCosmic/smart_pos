@@ -10,7 +10,7 @@ from stock.models import (
     Supplier, SupplierStockItem, StockItem, StockUnit, StockLocation,
     StockBatch, StockSettings
 )
-from base_service import (
+from stock.services.base_service import (
     BaseService, success_response, error_response, paginate_queryset,
     ValidationError, NotFoundError, BusinessRuleError,
     to_decimal, round_decimal, generate_number
