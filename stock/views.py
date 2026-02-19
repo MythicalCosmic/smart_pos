@@ -60,7 +60,6 @@ class BaseStockView(View):
         return JsonResponse({"success": True, **data}, status=status)
 
 
-# ==================== SETTINGS ====================
 
 class StockSettingsView(BaseStockView):
     
@@ -150,7 +149,6 @@ class LocationListView(BaseStockView):
 
 
 class LocationDetailView(BaseStockView):
-    """GET/PUT/DELETE /api/stock/locations/<id>/"""
     
     def get(self, request, location_id):
         try:
@@ -176,7 +174,6 @@ class LocationDetailView(BaseStockView):
 
 
 class LocationSetDefaultView(BaseStockView):
-    """POST /api/stock/locations/<id>/set-default/"""
     
     def post(self, request, location_id):
         try:
@@ -186,10 +183,8 @@ class LocationSetDefaultView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== UNITS ====================
 
 class UnitListView(BaseStockView):
-    """GET/POST /api/stock/units/"""
     
     def get(self, request):
         try:
@@ -212,7 +207,6 @@ class UnitListView(BaseStockView):
 
 
 class UnitDetailView(BaseStockView):
-    """GET/PUT/DELETE /api/stock/units/<id>/"""
     
     def get(self, request, unit_id):
         try:
@@ -238,7 +232,6 @@ class UnitDetailView(BaseStockView):
 
 
 class UnitConvertView(BaseStockView):
-    """POST /api/stock/units/convert/"""
     
     def post(self, request):
         try:
@@ -253,10 +246,8 @@ class UnitConvertView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== CATEGORIES ====================
 
 class CategoryListView(BaseStockView):
-    """GET/POST /api/stock/categories/"""
     
     def get(self, request):
         try:
@@ -283,7 +274,6 @@ class CategoryListView(BaseStockView):
 
 
 class CategoryDetailView(BaseStockView):
-    """GET/PUT/DELETE /api/stock/categories/<id>/"""
     
     def get(self, request, category_id):
         try:
@@ -309,10 +299,8 @@ class CategoryDetailView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== STOCK ITEMS ====================
 
 class StockItemListView(BaseStockView):
-    """GET/POST /api/stock/items/"""
     
     def get(self, request):
         try:
@@ -342,7 +330,6 @@ class StockItemListView(BaseStockView):
 
 
 class StockItemDetailView(BaseStockView):
-    """GET/PUT/DELETE /api/stock/items/<id>/"""
     
     def get(self, request, item_id):
         try:
@@ -369,7 +356,6 @@ class StockItemDetailView(BaseStockView):
 
 
 class StockItemSearchView(BaseStockView):
-    """GET /api/stock/items/search/"""
     
     def get(self, request):
         try:
@@ -382,7 +368,6 @@ class StockItemSearchView(BaseStockView):
 
 
 class StockItemBarcodeView(BaseStockView):
-    """GET /api/stock/items/barcode/<barcode>/"""
     
     def get(self, request, barcode):
         try:
@@ -393,7 +378,6 @@ class StockItemBarcodeView(BaseStockView):
 
 
 class StockItemStatsView(BaseStockView):
-    """GET /api/stock/items/stats/"""
     
     def get(self, request):
         try:
@@ -403,10 +387,8 @@ class StockItemStatsView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== STOCK LEVELS ====================
 
 class StockLevelListView(BaseStockView):
-    """GET /api/stock/levels/"""
     
     def get(self, request):
         try:
@@ -424,7 +406,6 @@ class StockLevelListView(BaseStockView):
 
 
 class StockLevelItemView(BaseStockView):
-    """GET /api/stock/levels/item/<id>/"""
     
     def get(self, request, item_id):
         try:
@@ -435,7 +416,6 @@ class StockLevelItemView(BaseStockView):
 
 
 class StockLevelLocationView(BaseStockView):
-    """GET /api/stock/levels/location/<id>/"""
     
     def get(self, request, location_id):
         try:
@@ -446,7 +426,6 @@ class StockLevelLocationView(BaseStockView):
 
 
 class StockAdjustView(BaseStockView):
-    """POST /api/stock/adjust/"""
     
     def post(self, request):
         try:
@@ -472,7 +451,6 @@ class StockAdjustView(BaseStockView):
 
 
 class StockReserveView(BaseStockView):
-    """POST /api/stock/reserve/"""
     
     def post(self, request):
         try:
@@ -493,7 +471,6 @@ class StockReserveView(BaseStockView):
 
 
 class StockReleaseReservationView(BaseStockView):
-    """POST /api/stock/release-reservation/"""
     
     def post(self, request):
         try:
@@ -512,7 +489,6 @@ class StockReleaseReservationView(BaseStockView):
 
 
 class LowStockView(BaseStockView):
-    """GET /api/stock/low-stock/"""
     
     def get(self, request):
         try:
@@ -523,10 +499,8 @@ class LowStockView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== TRANSACTIONS ====================
 
 class TransactionListView(BaseStockView):
-    """GET /api/stock/transactions/"""
     
     def get(self, request):
         try:
@@ -554,7 +528,6 @@ class TransactionListView(BaseStockView):
 
 
 class TransactionHistoryView(BaseStockView):
-    """GET /api/stock/transactions/item/<id>/"""
     
     def get(self, request, item_id):
         try:
@@ -565,10 +538,8 @@ class TransactionHistoryView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== BATCHES ====================
 
 class BatchListView(BaseStockView):
-    """GET/POST /api/stock/batches/"""
     
     def get(self, request):
         try:
@@ -611,7 +582,6 @@ class BatchListView(BaseStockView):
 
 
 class BatchDetailView(BaseStockView):
-    """GET/PUT /api/stock/batches/<id>/"""
     
     def get(self, request, batch_id):
         try:
@@ -630,7 +600,6 @@ class BatchDetailView(BaseStockView):
 
 
 class BatchConsumeView(BaseStockView):
-    """POST /api/stock/batches/<id>/consume/"""
     
     def post(self, request, batch_id):
         try:
@@ -650,7 +619,6 @@ class BatchConsumeView(BaseStockView):
 
 
 class BatchAutoConsumeView(BaseStockView):
-    """POST /api/stock/batches/auto-consume/"""
     
     def post(self, request):
         try:
@@ -671,7 +639,6 @@ class BatchAutoConsumeView(BaseStockView):
 
 
 class ExpiringBatchesView(BaseStockView):
-    """GET /api/stock/batches/expiring/"""
     
     def get(self, request):
         try:
@@ -683,7 +650,6 @@ class ExpiringBatchesView(BaseStockView):
 
 
 class ExpiredBatchesView(BaseStockView):
-    """GET /api/stock/batches/expired/"""
     
     def get(self, request):
         try:
@@ -693,10 +659,8 @@ class ExpiredBatchesView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== SUPPLIERS ====================
 
 class SupplierListView(BaseStockView):
-    """GET/POST /api/stock/suppliers/"""
     
     def get(self, request):
         try:
@@ -720,7 +684,6 @@ class SupplierListView(BaseStockView):
 
 
 class SupplierDetailView(BaseStockView):
-    """GET/PUT/DELETE /api/stock/suppliers/<id>/"""
     
     def get(self, request, supplier_id):
         try:
@@ -746,7 +709,6 @@ class SupplierDetailView(BaseStockView):
 
 
 class SupplierItemsView(BaseStockView):
-    """GET/POST /api/stock/suppliers/<id>/items/"""
     
     def get(self, request, supplier_id):
         try:
@@ -770,10 +732,8 @@ class SupplierItemsView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== PURCHASE ORDERS ====================
 
 class PurchaseOrderListView(BaseStockView):
-    """GET/POST /api/stock/purchase-orders/"""
     
     def get(self, request):
         try:
@@ -818,7 +778,6 @@ class PurchaseOrderListView(BaseStockView):
 
 
 class PurchaseOrderDetailView(BaseStockView):
-    """GET/PUT/DELETE /api/stock/purchase-orders/<id>/"""
     
     def get(self, request, po_id):
         try:
@@ -837,7 +796,6 @@ class PurchaseOrderDetailView(BaseStockView):
 
 
 class PurchaseOrderActionView(BaseStockView):
-    """POST /api/stock/purchase-orders/<id>/<action>/"""
     
     def post(self, request, po_id, action):
         try:
@@ -859,7 +817,6 @@ class PurchaseOrderActionView(BaseStockView):
 
 
 class PurchaseOrderItemView(BaseStockView):
-    """POST/PUT/DELETE /api/stock/purchase-orders/<id>/items/"""
     
     def post(self, request, po_id):
         try:
@@ -874,7 +831,6 @@ class PurchaseOrderItemView(BaseStockView):
 
 
 class PurchaseOrderItemDetailView(BaseStockView):
-    """PUT/DELETE /api/stock/purchase-order-items/<id>/"""
     
     def put(self, request, item_id):
         try:
@@ -893,7 +849,6 @@ class PurchaseOrderItemDetailView(BaseStockView):
 
 
 class PurchaseReceivingView(BaseStockView):
-    """POST /api/stock/purchase-orders/<id>/receiving/"""
     
     def post(self, request, po_id):
         try:
@@ -912,7 +867,6 @@ class PurchaseReceivingView(BaseStockView):
 
 
 class PurchaseReceivingItemView(BaseStockView):
-    """POST /api/stock/receiving/<id>/items/"""
     
     def post(self, request, receiving_id):
         try:
@@ -939,7 +893,6 @@ class PurchaseReceivingItemView(BaseStockView):
 
 
 class PurchaseReceivingCompleteView(BaseStockView):
-    """POST /api/stock/receiving/<id>/complete/"""
     
     def post(self, request, receiving_id):
         try:
@@ -949,10 +902,8 @@ class PurchaseReceivingCompleteView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== RECIPES ====================
 
 class RecipeListView(BaseStockView):
-    """GET/POST /api/stock/recipes/"""
     
     def get(self, request):
         try:
@@ -983,7 +934,6 @@ class RecipeListView(BaseStockView):
 
 
 class RecipeDetailView(BaseStockView):
-    """GET/PUT/DELETE /api/stock/recipes/<id>/"""
     
     def get(self, request, recipe_id):
         try:
@@ -1010,7 +960,6 @@ class RecipeDetailView(BaseStockView):
 
 
 class RecipeCostView(BaseStockView):
-    """GET /api/stock/recipes/<id>/cost/"""
     
     def get(self, request, recipe_id):
         try:
@@ -1022,7 +971,6 @@ class RecipeCostView(BaseStockView):
 
 
 class RecipeAvailabilityView(BaseStockView):
-    """GET /api/stock/recipes/<id>/availability/"""
     
     def get(self, request, recipe_id):
         try:
@@ -1035,7 +983,6 @@ class RecipeAvailabilityView(BaseStockView):
 
 
 class RecipeIngredientView(BaseStockView):
-    """POST /api/stock/recipes/<id>/ingredients/"""
     
     def post(self, request, recipe_id):
         try:
@@ -1050,7 +997,6 @@ class RecipeIngredientView(BaseStockView):
 
 
 class RecipeIngredientDetailView(BaseStockView):
-    """PUT/DELETE /api/stock/recipe-ingredients/<id>/"""
     
     def put(self, request, ingredient_id):
         try:
@@ -1068,10 +1014,8 @@ class RecipeIngredientDetailView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== PRODUCTION ORDERS ====================
 
 class ProductionOrderListView(BaseStockView):
-    """GET/POST /api/stock/production-orders/"""
     
     def get(self, request):
         try:
@@ -1108,7 +1052,6 @@ class ProductionOrderListView(BaseStockView):
 
 
 class ProductionOrderDetailView(BaseStockView):
-    """GET/PUT /api/stock/production-orders/<id>/"""
     
     def get(self, request, order_id):
         try:
@@ -1127,7 +1070,6 @@ class ProductionOrderDetailView(BaseStockView):
 
 
 class ProductionOrderActionView(BaseStockView):
-    """POST /api/stock/production-orders/<id>/<action>/"""
     
     def post(self, request, order_id, action):
         try:
@@ -1162,10 +1104,8 @@ class ProductionOrderActionView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== TRANSFERS ====================
 
 class TransferListView(BaseStockView):
-    """GET/POST /api/stock/transfers/"""
     
     def get(self, request):
         try:
@@ -1200,7 +1140,6 @@ class TransferListView(BaseStockView):
 
 
 class TransferDetailView(BaseStockView):
-    """GET/PUT /api/stock/transfers/<id>/"""
     
     def get(self, request, transfer_id):
         try:
@@ -1219,7 +1158,6 @@ class TransferDetailView(BaseStockView):
 
 
 class TransferActionView(BaseStockView):
-    """POST /api/stock/transfers/<id>/<action>/"""
     
     def post(self, request, transfer_id, action):
         try:
@@ -1246,7 +1184,6 @@ class TransferActionView(BaseStockView):
 
 
 class TransferItemView(BaseStockView):
-    """POST /api/stock/transfers/<id>/items/"""
     
     def post(self, request, transfer_id):
         try:
@@ -1261,7 +1198,6 @@ class TransferItemView(BaseStockView):
 
 
 class QuickTransferView(BaseStockView):
-    """POST /api/stock/transfers/quick/"""
     
     def post(self, request):
         try:
@@ -1283,10 +1219,8 @@ class QuickTransferView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== STOCK COUNTS ====================
 
 class StockCountListView(BaseStockView):
-    """GET/POST /api/stock/counts/"""
     
     def get(self, request):
         try:
@@ -1321,7 +1255,6 @@ class StockCountListView(BaseStockView):
 
 
 class StockCountDetailView(BaseStockView):
-    """GET /api/stock/counts/<id>/"""
     
     def get(self, request, count_id):
         try:
@@ -1332,7 +1265,6 @@ class StockCountDetailView(BaseStockView):
 
 
 class StockCountActionView(BaseStockView):
-    """POST /api/stock/counts/<id>/<action>/"""
     
     def post(self, request, count_id, action):
         try:
@@ -1357,7 +1289,6 @@ class StockCountActionView(BaseStockView):
 
 
 class StockCountRecordView(BaseStockView):
-    """POST /api/stock/counts/<id>/record/"""
     
     def post(self, request, count_id):
         try:
@@ -1375,7 +1306,6 @@ class StockCountRecordView(BaseStockView):
 
 
 class VarianceCodeListView(BaseStockView):
-    """GET/POST /api/stock/variance-codes/"""
     
     def get(self, request):
         try:
@@ -1395,7 +1325,6 @@ class VarianceCodeListView(BaseStockView):
 
 
 class VarianceCodeSeedView(BaseStockView):
-    """POST /api/stock/variance-codes/seed/"""
     
     def post(self, request):
         try:
@@ -1405,10 +1334,8 @@ class VarianceCodeSeedView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== PRODUCT LINKS ====================
 
 class ProductLinkListView(BaseStockView):
-    """GET /api/stock/product-links/"""
     
     def get(self, request):
         try:
@@ -1424,7 +1351,6 @@ class ProductLinkListView(BaseStockView):
 
 
 class ProductLinkDetailView(BaseStockView):
-    """GET/PUT/DELETE /api/stock/product-links/<id>/"""
     
     def get(self, request, link_id):
         try:
@@ -1453,7 +1379,6 @@ class ProductLinkDetailView(BaseStockView):
 
 
 class ProductLinkByProductView(BaseStockView):
-    """GET /api/stock/products/<id>/link/"""
     
     def get(self, request, product_id):
         try:
@@ -1464,7 +1389,6 @@ class ProductLinkByProductView(BaseStockView):
 
 
 class ProductLinkToRecipeView(BaseStockView):
-    """POST /api/stock/products/<id>/link-recipe/"""
     
     def post(self, request, product_id):
         try:
@@ -1480,7 +1404,6 @@ class ProductLinkToRecipeView(BaseStockView):
 
 
 class ProductLinkToItemView(BaseStockView):
-    """POST /api/stock/products/<id>/link-item/"""
     
     def post(self, request, product_id):
         try:
@@ -1498,7 +1421,6 @@ class ProductLinkToItemView(BaseStockView):
 
 
 class ProductLinkWithComponentsView(BaseStockView):
-    """POST /api/stock/products/<id>/link-components/"""
     
     def post(self, request, product_id):
         try:
@@ -1514,7 +1436,6 @@ class ProductLinkWithComponentsView(BaseStockView):
 
 
 class ProductUnlinkView(BaseStockView):
-    """DELETE /api/stock/products/<id>/unlink/"""
     
     def delete(self, request, product_id):
         try:
@@ -1524,10 +1445,8 @@ class ProductUnlinkView(BaseStockView):
             return handle_service_error(e)
 
 
-# ==================== ORDER INTEGRATION ====================
 
 class OrderStockDeductView(BaseStockView):
-    """POST /api/stock/orders/deduct/"""
     
     def post(self, request):
         try:
@@ -1547,7 +1466,6 @@ class OrderStockDeductView(BaseStockView):
 
 
 class OrderStockReverseView(BaseStockView):
-    """POST /api/stock/orders/reverse/"""
     
     def post(self, request):
         try:
@@ -1565,7 +1483,6 @@ class OrderStockReverseView(BaseStockView):
 
 
 class OrderStockAvailabilityView(BaseStockView):
-    """POST /api/stock/orders/check-availability/"""
     
     def post(self, request):
         try:
@@ -1580,7 +1497,6 @@ class OrderStockAvailabilityView(BaseStockView):
 
 
 class OrderStockReserveView(BaseStockView):
-    """POST /api/stock/orders/reserve/"""
     
     def post(self, request):
         try:
