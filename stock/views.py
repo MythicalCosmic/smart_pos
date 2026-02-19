@@ -663,7 +663,7 @@ class BatchAutoConsumeView(BaseStockView):
                 quantity=data["quantity"],
                 movement_type=data["movement_type"],
                 user_id=user_id or data.get("user_id"),
-                costing_method=data.get("costing_method"),
+                # costing_method=data.get("costing_method"),
             )
             return self.success(result)
         except Exception as e:

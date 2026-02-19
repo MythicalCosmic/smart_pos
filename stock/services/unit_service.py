@@ -1,3 +1,4 @@
+from pydoc import classname
 from typing import Dict, Any, Optional, List, Tuple
 from decimal import Decimal
 from django.db import transaction
@@ -67,12 +68,12 @@ class StockUnitService(BaseService):
             queryset = queryset.filter(is_base_unit=True)
         
         queryset = queryset.order_by("unit_type", "name")
-        
+
         units_by_type = {}
         all_units = []
         
         for unit in queryset:
-            data = cls.serialize(unit)
+            data = cls.serialize(cls, unit)
             all_units.append(data)
             
             if unit.unit_type not in units_by_type:
@@ -128,7 +129,7 @@ class StockUnitService(BaseService):
             raise NotFoundError("Unit", unit_id)
         
         return success_response({
-            "unit": cls.serialize(unit, include_derived=include_derived)
+            "unit": cls.serialize(cls, unit, include_derived=include_derived)
         })
     
     @classmethod
@@ -189,7 +190,7 @@ class StockUnitService(BaseService):
         return success_response({
             "id": unit.id,
             "uuid": str(unit.uuid),
-            "unit": cls.serialize(unit)
+            "unit": unit.name,
         }, f"Unit '{name}' created")
     
     @classmethod
