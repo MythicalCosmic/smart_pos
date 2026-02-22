@@ -821,7 +821,7 @@ class PurchaseOrderItemView(BaseStockView):
     def post(self, request, po_id):
         try:
             data = self.get_json_body(request)
-            result = PurchaseOrderItemService.add_item(
+            result = PurchaseOrderItemService.add(
                 purchase_order_id=po_id,
                 **data
             )
