@@ -553,7 +553,7 @@ class PurchaseOrder(models.Model):
         max_length=20, choices=Status.choices, default=Status.DRAFT
     )
     order_date = models.DateField()
-    expected_date = models.DateField(null=True, blank=True)
+    expected_date = models.DateTimeField(null=True, blank=True)
     received_date = models.DateField(null=True, blank=True)
 
     subtotal = models.DecimalField(max_digits=15, decimal_places=2, default=0)
@@ -566,7 +566,7 @@ class PurchaseOrder(models.Model):
     payment_status = models.CharField(
         max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.UNPAID
     )
-    payment_due_date = models.DateField(null=True, blank=True)
+    payment_due_date = models.DateTimeField(null=True, blank=True)
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

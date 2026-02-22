@@ -200,10 +200,13 @@ class PurchaseOrderService(BaseService):
         
         payment_due_date = None
         if supplier.payment_terms_days:
-            payment_due_date = order_date + timedelta(days=supplier.payment_terms_days)
+            payment_due_date = order_date 
         
         if not expected_date and supplier.lead_time_days:
-            expected_date = order_date + timedelta(days=supplier.lead_time_days)
+            expected_date = order_date 
+            print(supplier.lead_time_days)
+            print(order_date)
+            print(expected_date)
         
         po = cls.model.objects.create(
             order_number=order_number,
