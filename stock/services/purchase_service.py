@@ -574,7 +574,7 @@ class PurchaseOrderItemService(BaseService):
     
     @classmethod
     @transaction.atomic
-    def update(cls, item_id: int, **kwargs) -> Dict[str, Any]:
+    def update_item(cls, item_id: int, **kwargs) -> Dict[str, Any]:
         try:
             item = cls.model.objects.select_related("purchase_order").get(id=item_id)
         except cls.model.DoesNotExist:
@@ -705,6 +705,48 @@ class PurchaseReceivingService(BaseService):
     
     @classmethod
     @transaction.atomic
+    def add_item(cls, receiving_id: int, po_item_id: int, quantity_received: int, batch_number: int, expiry_date: date, unit_cost: float, quality_status: str, notes: str) -> Dict[str, Any]:
+        try: 
+            try:
+                rcv = cls.model.objects.get(id=receiving_id)
+            except cls.model.DoesNotExist:
+                raise NotFoundError("Receiving", receiving_id)
+            
+            try:
+                po_item_id = PurchaseOrderItem.objects.get(id=po_item_id)
+            except PurchaseOrderItem.DoesNotExist:
+                raise NotFoundError("Purchase Order Item", po_item_id)
+            
+            if rcv.status != PurchaseReceiving.Status.DRAFT:
+                raise BusinessRuleError("Cannot add items to completed receiving")
+            
+            item = PurchaseReceivingItem.objects.create(
+                receiving=rcv,
+                po_item=po_item_id,
+                stock_item=po_item_id.stock_item,
+                quantity_received=quantity_received,
+                unit=po_item_id.unit,
+                batch_number=batch_number,
+                expiry_date=expiry_date,
+                unit_cost=unit_cost,
+                quality_status=quality_status,
+                notes=notes,
+            )
+            return success_response({
+                "id": item.id,
+                "item": PurchaseReceivingItemService.serialize(item)
+            }, "Item added to receiving")
+        
+
+        except Exception as e:
+            return error_response(str(e))
+
+
+
+
+
+    @classmethod
+    @transaction.atomic
     def complete(cls, receiving_id: int) -> Dict[str, Any]:
         try:
             rcv = cls.model.objects.select_related("purchase_order").get(id=receiving_id)
@@ -768,6 +810,42 @@ class PurchaseReceivingService(BaseService):
         return success_response({
             "receiving": cls.serialize(rcv)
         }, "Receiving completed")
+    
+    @classmethod
+    @transaction.atomic
+    def update_item(cls, item_id: int, quantity_received: Decimal = None, batch_number: str = None, expiry_date: date = None, unit_cost: Decimal = None, quality_status: str = None, notes: str = None) -> Dict[str, Any]:
+        try:
+            item = PurchaseReceivingItem.objects.select_related("receiving", "po_item").get(id=item_id)
+        except PurchaseReceivingItem.DoesNotExist:
+            raise NotFoundError("Receiving item", item_id)
+        
+        if item.receiving.status != PurchaseReceiving.Status.DRAFT:
+            raise BusinessRuleError("Cannot update items in completed receiving")
+        
+        if quantity_received is not None:
+            quantity_received = to_decimal(quantity_received)
+            item.quantity_received = quantity_received
+        
+        if batch_number is not None:
+            item.batch_number = batch_number
+        
+        if expiry_date is not None:
+            item.expiry_date = expiry_date
+        
+        if unit_cost is not None:
+            item.unit_cost = to_decimal(unit_cost)
+        
+        if quality_status is not None:
+            item.quality_status = quality_status
+        
+        if notes is not None:
+            item.notes = notes
+        
+        item.save()
+        
+        return success_response({
+            "item": PurchaseReceivingItemService.serialize(item)
+        }, "Receiving item updated")
     
     @classmethod
     def _update_po_status(cls, po: PurchaseOrder):
@@ -896,3 +974,4 @@ class PurchaseReceivingItemService(BaseService):
         return success_response({
             "items_added": added
         }, f"{added} items added to receiving")
+

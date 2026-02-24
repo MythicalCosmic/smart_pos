@@ -546,6 +546,8 @@ class RecipeService(BaseService):
         
         for ing in recipe.ingredients.select_related("stock_item", "unit"):
             qty = ing.quantity * batch_multiplier
+            print(qty)
+            print(123)
             
             if ing.waste_percentage > 0:
                 qty = qty * (1 + ing.waste_percentage / 100)
@@ -620,6 +622,38 @@ class RecipeService(BaseService):
             "ingredients": scaled_ingredients,
             "by_products": scaled_byproducts,
             "estimated_cost": str(cls.calculate_cost(recipe.id, multiplier)),
+        })
+    
+    @classmethod
+    @transaction.atomic
+    def check_availability(cls, recipe_id: int, quantity: Decimal = Decimal("1"), location_id: int = None,  batch_multiplier: Decimal = Decimal("1")) -> Dict[str, Any]:
+        recipe = cls.get_by_id(recipe_id)
+        if not recipe:
+            raise NotFoundError("Recipe", recipe_id)
+        
+        availability = []
+        for ing in recipe.ingredients.select_related("stock_item", "unit"):
+            required_qty = ing.quantity * batch_multiplier
+            if ing.waste_percentage > 0:
+                required_qty = required_qty * (1 + ing.waste_percentage / 100)
+            
+            available_stock = ing.stock_item.get_available_stock()
+            is_available = available_stock >= required_qty
+            
+            availability.append({
+                "stock_item_id": ing.stock_item_id,
+                "stock_item_name": ing.stock_item.name,
+                "required_quantity": str(round_decimal(required_qty, 4)),
+                "available_stock": str(round_decimal(available_stock, 4)),
+                "unit": ing.unit.short_name,
+                "is_available": is_available,
+            })
+        
+        return success_response({
+            "recipe_id": recipe.id,
+            "recipe_name": recipe.name,
+            "batch_multiplier": str(batch_multiplier),
+            "ingredients": availability,
         })
 
 
