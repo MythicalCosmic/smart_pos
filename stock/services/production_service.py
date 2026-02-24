@@ -355,7 +355,7 @@ class ProductionOrderService(BaseService):
     
     @classmethod
     @transaction.atomic
-    def plan(cls, po_id: int) -> Dict[str, Any]:
+    def plan(cls, po_id: int, planned_start: int = None) -> Dict[str, Any]:
         po = cls.get_by_id(po_id)
         if not po:
             raise NotFoundError("Production order", po_id)
@@ -365,12 +365,11 @@ class ProductionOrderService(BaseService):
         
         availability = cls.check_ingredient_availability(po_id)
         
-        if not availability["data"]["all_available"]:
+        if not availability["ingredients"] and availability["all_available"]:
             raise BusinessRuleError("Not all ingredients are available")
         
         po.status = ProductionOrder.Status.PLANNED
         po.save(update_fields=["status", "updated_at"])
-        
         cls._allocate_ingredients(po_id)
         
         return success_response({

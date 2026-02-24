@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.http import JsonResponse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -963,9 +965,10 @@ class RecipeCostView(BaseStockView):
     
     def get(self, request, recipe_id):
         try:
-            batch_size = float(request.GET.get("batch_size", 1))
+            from decimal import Decimal
+            batch_size = Decimal(request.GET.get("batch_size", 1))
             result = RecipeService.calculate_cost(recipe_id, batch_size)
-            return self.success(result)
+            return self.success({"total_cost": result})
         except Exception as e:
             return handle_service_error(e)
 
@@ -987,7 +990,7 @@ class RecipeIngredientView(BaseStockView):
     def post(self, request, recipe_id):
         try:
             data = self.get_json_body(request)
-            result = RecipeIngredientService.add_ingredient(
+            result = RecipeIngredientService.add(
                 recipe_id=recipe_id,
                 **data
             )
@@ -1001,14 +1004,14 @@ class RecipeIngredientDetailView(BaseStockView):
     def put(self, request, ingredient_id):
         try:
             data = self.get_json_body(request)
-            result = RecipeIngredientService.update_ingredient(ingredient_id, **data)
+            result = RecipeIngredientService.update(ingredient_id, **data)
             return self.success(result)
         except Exception as e:
             return handle_service_error(e)
     
     def delete(self, request, ingredient_id):
         try:
-            result = RecipeIngredientService.remove_ingredient(ingredient_id)
+            result = RecipeIngredientService.remove(ingredient_id)
             return self.success(result)
         except Exception as e:
             return handle_service_error(e)
