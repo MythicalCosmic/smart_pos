@@ -1,6 +1,12 @@
 from django.urls import path
 from . import views
-
+from .ai_views import (
+    AIAssistantQueryView,
+    AIAssistantSuggestionsView,
+    AIAssistantQuickActionsView,
+    AIAssistantHistoryView,
+    AIAssistantFeedbackView,
+)
 app_name = "stock"
 
 urlpatterns = [
@@ -92,4 +98,10 @@ urlpatterns = [
     path("orders/reverse/", views.OrderStockReverseView.as_view(), name="order-reverse"),
     path("orders/check-availability/", views.OrderStockAvailabilityView.as_view(), name="order-check-availability"),
     path("orders/reserve/", views.OrderStockReserveView.as_view(), name="order-reserve"),
+
+    path("ai/query/", AIAssistantQueryView.as_view(), name="ai-query"),
+    path("ai/suggestions/", AIAssistantSuggestionsView.as_view(), name="ai-suggestions"),
+    path("ai/quick-actions/", AIAssistantQuickActionsView.as_view(), name="ai-quick-actions"),
+    path("ai/history/", AIAssistantHistoryView.as_view(), name="ai-history"),
+    path("ai/feedback/", AIAssistantFeedbackView.as_view(), name="ai-feedback"),
 ]
