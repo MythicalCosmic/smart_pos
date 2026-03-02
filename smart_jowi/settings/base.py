@@ -20,7 +20,7 @@ DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
-
+GEMINI_API_KEY = 'AIzaSyDq60ysKtvM1QzrKIw6evUtkbYWtUkv2ko'
 # Application definition
 INSTALLED_APPS = [
     "unfold", 
@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     'stock',
     'corsheaders',
     'rest_framework',
-    'drf_spectacular',
+    'drf_spectacular'
 ]
 
 MIDDLEWARE = [
