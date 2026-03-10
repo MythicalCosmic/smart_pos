@@ -1,232 +1,210 @@
+import jwt
+from datetime import datetime, timedelta, timezone
+from django.conf import settings
+from django.contrib.auth.hashers import make_password, check_password
 from django.db import transaction
-from django.utils import timezone
 
-from main.models import User, Session, PasswordReset
+from main.models import User, Session
 from admins.services.base_service import ServiceResponse, CacheService
-from admins.services.role_permission_service import RolePermissionService
 
 
-SESSION_TTL = 72 * 3600
 USER_CACHE_TTL = 600
-PERMISSIONS_CACHE_TTL = 300
 RATE_LIMIT_TTL = 900
 MAX_LOGIN_ATTEMPTS = 5
 
 
-class AuthService:
+class AdminAuthService:
+    JWT_SECRET = getattr(settings, 'JWT_SECRET_KEY', settings.SECRET_KEY)
+    JWT_ALGORITHM = 'HS256'
+    JWT_EXPIRY_DAYS = 365
 
     @classmethod
     def login(cls, email: str, password: str,
-              ip_address: str = "", user_agent: str = "", device: str = "") -> tuple:
+              ip_address: str = "", user_agent: str = "") -> tuple:
 
-        #rate limiting -- block brute force
-        rate_key = f"login_attempts:{ip_address}"
+        # rate limiting
+        rate_key = f"admin_login_attempts:{ip_address}"
         attempts = CacheService.get(rate_key) or 0
         if attempts >= MAX_LOGIN_ATTEMPTS:
             return ServiceResponse.error(
                 "Too many login attempts. Try again in 15 minutes", status=429
             )
 
-        #find user and verify password
-        user = User.objects.filter(email=email, is_active=True).first()
-        if not user or not user.check_password(password):
+        # find user
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
             CacheService.set(rate_key, attempts + 1, RATE_LIMIT_TTL)
             return ServiceResponse.error("Invalid credentials", status=401)
 
-        #success -- clear rate limit
+        # check status
+        if user.status == User.UserStatus.SUSPENDED:
+            return ServiceResponse.error("Account suspended", status=403)
+
+        # check password
+        if not check_password(password, user.password):
+            CacheService.set(rate_key, attempts + 1, RATE_LIMIT_TTL)
+            return ServiceResponse.error("Invalid credentials", status=401)
+
+        # admin only
+        if user.role != User.RoleChoices.ADMIN:
+            return ServiceResponse.error(
+                "Access denied. Admin role required", status=403
+            )
+
+        # success -- clear rate limit
         CacheService.delete(rate_key)
 
-        #update last login
-        user.last_login_at = timezone.now()
-        user.last_login_ip = ip_address
-        user.save(update_fields=["last_login_at", "last_login_ip"])
+        # generate token
+        token = cls._generate_token(user)
 
-        #create session
-        session = Session.create_session(
-            user=user,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            device=device,
+        # clear old sessions and create new one
+        Session.objects.filter(user_id=user).delete()
+        Session.objects.create(
+            user_id=user,
+            ip_address=ip_address[:20] if ip_address else "",
+            user_agent=user_agent[:30] if user_agent else "Unknown",
+            payload=token[:20],
         )
 
-        cls._cache_user(user)
-        cls._cache_permissions(user)
+        # update last login
+        User.objects.filter(id=user.id).update(
+            last_login_at=datetime.now().date(),
+            last_login_api=ip_address[:20] if ip_address else None,
+        )
 
         return ServiceResponse.success(
             message="Logged in successfully",
             data={
-                "session_key": session.key,
+                "token": token,
                 "user": cls._serialize_user(user),
-                "permissions": list(user.get_permissions()),
             },
         )
 
     @classmethod
-    def logout(cls, session_key: str) -> tuple:
-        session = Session.get_valid_session(session_key)
-        if not session:
-            return ServiceResponse.unauthorized("Invalid or expired session")
+    def logout(cls, token: str) -> tuple:
+        user = cls._verify_token(token)
+        if not user:
+            return ServiceResponse.unauthorized("Invalid or expired token")
 
-        user_id = session.user_id
-        session.invalidate()
-
-        CacheService.delete(f"user:{user_id}")
-        CacheService.delete(f"permissions:{user_id}")
-        CacheService.delete(f"session:{session_key}")
+        Session.objects.filter(user_id=user, payload=token[:20]).delete()
+        CacheService.delete(f"admin_user:{user.pk}")
 
         return ServiceResponse.success("Logged out successfully")
 
     @classmethod
-    def logout_all(cls, session_key: str) -> tuple:
-        session = Session.get_valid_session(session_key)
-        if not session:
-            return ServiceResponse.unauthorized("Invalid or expired session")
+    def logout_all(cls, token: str) -> tuple:
+        user = cls._verify_token(token)
+        if not user:
+            return ServiceResponse.unauthorized("Invalid or expired token")
 
-        user = session.user
-        Session.invalidate_all(user)
-
-        CacheService.delete(f"user:{user.pk}")
-        CacheService.delete(f"permissions:{user.pk}")
+        Session.objects.filter(user_id=user).delete()
+        CacheService.delete(f"admin_user:{user.pk}")
 
         return ServiceResponse.success("Logged out from all devices")
 
     @classmethod
-    def me(cls, session_key: str) -> tuple:
-        session = Session.get_valid_session(session_key)
-        if not session:
-            return ServiceResponse.unauthorized("Invalid or expired session")
+    def me(cls, token: str) -> tuple:
+        user = cls._verify_token(token)
+        if not user:
+            return ServiceResponse.unauthorized("Invalid or expired token")
 
-        user = session.user
-
-        cached = CacheService.get(f"user:{user.pk}")
+        cached = CacheService.get(f"admin_user:{user.pk}")
         if cached:
             return ServiceResponse.success("Profile retrieved", data=cached)
 
         user_data = cls._serialize_user(user)
-        user_data["permissions"] = list(user.get_permissions())
-        user_data["roles"] = list(user.get_roles())
-
-        CacheService.set(f"user:{user.pk}", user_data, USER_CACHE_TTL)
+        CacheService.set(f"admin_user:{user.pk}", user_data, USER_CACHE_TTL)
 
         return ServiceResponse.success("Profile retrieved", data=user_data)
 
     @classmethod
     @transaction.atomic
-    def change_password(cls, session_key: str, current_password: str, new_password: str) -> tuple:
-        session = Session.get_valid_session(session_key)
-        if not session:
-            return ServiceResponse.unauthorized("Invalid or expired session")
+    def change_password(cls, token: str, current_password: str,
+                        new_password: str) -> tuple:
+        user = cls._verify_token(token)
+        if not user:
+            return ServiceResponse.unauthorized("Invalid or expired token")
 
-        user = session.user
-
-        if not user.check_password(current_password):
+        if not check_password(current_password, user.password):
             return ServiceResponse.error("Current password is incorrect")
 
-        user.set_password(new_password)
+        user.password = make_password(new_password)
         user.save(update_fields=["password"])
 
-        #kill all other sessions
-        Session.objects.filter(
-            user=user, is_active=True
-        ).exclude(key=session_key).update(is_active=False)
+        # kill all sessions
+        Session.objects.filter(user_id=user).delete()
+        CacheService.delete(f"admin_user:{user.pk}")
 
-        return ServiceResponse.success("Password changed successfully")
+        # create fresh session so user stays logged in
+        new_token = cls._generate_token(user)
+        Session.objects.create(
+            user_id=user,
+            ip_address="",
+            user_agent="",
+            payload=new_token[:20],
+        )
 
-    @classmethod
-    def request_password_reset(cls, email: str) -> tuple:
-        user = User.objects.filter(email=email, is_active=True).first()
-
-        if user:
-            reset = PasswordReset.create_token(user)
-            #TODO: send email with reset.token
-
-        #always success to prevent email enumeration
         return ServiceResponse.success(
-            "If the email exists, a reset link has been sent"
+            "Password changed successfully",
+            data={"token": new_token},
         )
 
     @classmethod
-    @transaction.atomic
-    def reset_password(cls, token: str, new_password: str) -> tuple:
-        reset = PasswordReset.validate_token(token)
-        if not reset:
-            return ServiceResponse.error("Invalid or expired reset token")
-
-        user = reset.user
-
-        user.set_password(new_password)
-        user.save(update_fields=["password"])
-
-        reset.consume()
-        Session.invalidate_all(user)
-        CacheService.delete(f"user:{user.pk}")
-
-        return ServiceResponse.success("Password reset successfully. Please login again.")
+    def get_user_from_token(cls, token):
+        return cls._verify_token(token)
 
     @classmethod
-    def get_active_sessions(cls, session_key: str) -> tuple:
-        session = Session.get_valid_session(session_key)
-        if not session:
-            return ServiceResponse.unauthorized("Invalid or expired session")
-
-        sessions = Session.objects.filter(
-            user=session.user, is_active=True, expires_at__gt=timezone.now()
-        ).values("key", "ip_address", "device", "user_agent", "last_activity_at", "created_at")
-
-        data = []
-        for s in sessions:
-            data.append({
-                "key": s["key"][:12] + "...",
-                "ip_address": s["ip_address"],
-                "device": s["device"],
-                "user_agent": s["user_agent"][:100] if s["user_agent"] else "",
-                "last_activity": s["last_activity_at"].isoformat() if s["last_activity_at"] else None,
-                "created_at": s["created_at"].isoformat() if s["created_at"] else None,
-                "is_current": s["key"] == session_key,
-            })
-
-        return ServiceResponse.success("Active sessions", data=data)
+    def _generate_token(cls, user):
+        payload = {
+            'user_id': user.id,
+            'email': user.email,
+            'role': user.role,
+            'exp': datetime.now(timezone.utc) + timedelta(days=cls.JWT_EXPIRY_DAYS),
+            'iat': datetime.now(timezone.utc),
+            'type': 'admin',
+        }
+        return jwt.encode(payload, cls.JWT_SECRET, algorithm=cls.JWT_ALGORITHM)
 
     @classmethod
-    def revoke_session(cls, session_key: str, target_key: str) -> tuple:
-        session = Session.get_valid_session(session_key)
-        if not session:
-            return ServiceResponse.unauthorized("Invalid or expired session")
+    def _verify_token(cls, token):
+        try:
+            payload = jwt.decode(
+                token, cls.JWT_SECRET, algorithms=[cls.JWT_ALGORITHM]
+            )
 
-        target = Session.objects.filter(
-            key=target_key, user=session.user, is_active=True
-        ).first()
+            if payload.get('type') != 'admin':
+                return None
 
-        if not target:
-            return ServiceResponse.not_found("Session not found")
+            user = User.objects.get(id=payload['user_id'])
 
-        target.invalidate()
-        CacheService.delete(f"session:{target_key}")
+            if user.role != User.RoleChoices.ADMIN:
+                return None
 
-        return ServiceResponse.success("Session revoked")
+            if user.status != User.UserStatus.ACTIVE:
+                return None
+
+            if not Session.objects.filter(
+                user_id=user, payload=token[:20]
+            ).exists():
+                return None
+
+            return user
+
+        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError,
+                User.DoesNotExist):
+            return None
 
     @classmethod
-    def _serialize_user(cls, user: User) -> dict:
+    def _serialize_user(cls, user) -> dict:
         return {
             "id": user.pk,
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
-            "full_name": user.full_name,
-            "phone": user.phone,
-            "is_active": user.is_active,
-            "email_verified": user.email_verified_at is not None,
-            "last_login": user.last_login_at.isoformat() if user.last_login_at else None,
+            "role": user.role,
+            "status": user.status,
+            "last_login_at": (
+                user.last_login_at.isoformat() if user.last_login_at else None
+            ),
         }
-
-    @classmethod
-    def _cache_user(cls, user: User) -> None:
-        CacheService.set(f"user:{user.pk}", cls._serialize_user(user), USER_CACHE_TTL)
-
-    @classmethod
-    def _cache_permissions(cls, user: User) -> None:
-        RolePermissionService.cache_permissions(user)
-
-    @classmethod
-    def get_cached_permissions(cls, user_id: int) -> list:
-        return RolePermissionService.get_cached_permissions(user_id)
