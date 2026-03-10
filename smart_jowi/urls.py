@@ -30,6 +30,7 @@ urlpatterns = [
     path('', include('main.urls')),
     path('', include('client.urls')),
     path('', include('stock.urls')),
+    path('admins-api/', include('admins.urls')),
     # path('i18n/', include('django.conf.urls.i18n')),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema')),
