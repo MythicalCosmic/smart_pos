@@ -63,9 +63,10 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
-            BASE_DIR / 'templates', 
-            BASE_DIR / 'main' / 'templates',  
+            BASE_DIR / 'templates',
+            BASE_DIR / 'main' / 'templates',
             BASE_DIR / 'client' / 'templates',
+            BASE_DIR / 'stock' / 'templates',
         ],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -195,6 +196,121 @@ UNFOLD = {
                         "title": "Sessions",
                         "icon": "key",
                         "link": reverse_lazy("admin:main_session_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Stock Management",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Stock Items",
+                        "icon": "package_2",
+                        "link": reverse_lazy("admin:stock_stockitem_changelist"),
+                    },
+                    {
+                        "title": "Stock Levels",
+                        "icon": "equalizer",
+                        "link": reverse_lazy("admin:stock_stocklevel_changelist"),
+                    },
+                    {
+                        "title": "Batches",
+                        "icon": "layers",
+                        "link": reverse_lazy("admin:stock_stockbatch_changelist"),
+                    },
+                    {
+                        "title": "Transactions",
+                        "icon": "swap_vert",
+                        "link": reverse_lazy("admin:stock_stocktransaction_changelist"),
+                    },
+                    {
+                        "title": "Locations",
+                        "icon": "location_on",
+                        "link": reverse_lazy("admin:stock_stocklocation_changelist"),
+                    },
+                    {
+                        "title": "Categories",
+                        "icon": "folder_open",
+                        "link": reverse_lazy("admin:stock_stockcategory_changelist"),
+                    },
+                    {
+                        "title": "Units",
+                        "icon": "straighten",
+                        "link": reverse_lazy("admin:stock_stockunit_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Supply Chain",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Suppliers",
+                        "icon": "local_shipping",
+                        "link": reverse_lazy("admin:stock_supplier_changelist"),
+                    },
+                    {
+                        "title": "Purchase Orders",
+                        "icon": "receipt",
+                        "link": reverse_lazy("admin:stock_purchaseorder_changelist"),
+                    },
+                    {
+                        "title": "Receiving",
+                        "icon": "move_to_inbox",
+                        "link": reverse_lazy("admin:stock_purchasereceiving_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Production",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Recipes",
+                        "icon": "menu_book",
+                        "link": reverse_lazy("admin:stock_recipe_changelist"),
+                    },
+                    {
+                        "title": "Production Orders",
+                        "icon": "precision_manufacturing",
+                        "link": reverse_lazy("admin:stock_productionorder_changelist"),
+                    },
+                    {
+                        "title": "Product Links",
+                        "icon": "link",
+                        "link": reverse_lazy("admin:stock_productstocklink_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Operations",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Transfers",
+                        "icon": "sync_alt",
+                        "link": reverse_lazy("admin:stock_stocktransfer_changelist"),
+                    },
+                    {
+                        "title": "Stock Counts",
+                        "icon": "fact_check",
+                        "link": reverse_lazy("admin:stock_stockcount_changelist"),
+                    },
+                    {
+                        "title": "Variance Codes",
+                        "icon": "error_outline",
+                        "link": reverse_lazy("admin:stock_variancereasoncode_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "AI Assistant",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "AI Stock Assistant",
+                        "icon": "neurology",
+                        "link": reverse_lazy("admin:stock_ai_assistant"),
                     },
                 ],
             },
