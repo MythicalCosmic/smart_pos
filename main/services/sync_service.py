@@ -253,14 +253,25 @@ class SyncService:
         except:
             return False
     
+    MODEL_ORDER = [
+        'main.user',
+        'main.category',
+        'main.deliveryperson',
+        'main.product',
+        'main.order',
+        'main.orderitem',
+        'main.cashregister',
+        'main.inkassa',
+    ]
+
     @classmethod
     def sync_now(cls) -> Dict[str, Any]:
         if not cls.is_enabled():
             return {'success': False, 'message': 'Sync not enabled'}
-        
+
         if not cls.is_local_mode():
             return {'success': False, 'message': 'Sync only available in local mode'}
-        
+
         result = {
             'success': True,
             'synced': 0,
@@ -268,7 +279,7 @@ class SyncService:
             'errors': [],
             'started_at': timezone.now().isoformat(),
         }
-        
+
         if not cls.check_connection():
             SyncStatusTracker.update(
                 is_online=False,
@@ -279,63 +290,61 @@ class SyncService:
                 'message': 'Cannot reach cloud server',
                 'offline': True
             }
-        
+
         SyncStatusTracker.update(is_online=True)
         batch_size = getattr(settings, 'SYNC_BATCH_SIZE', 100)
-        pending = SyncQueue.get_batch(batch_size)
-        
-        if not pending:
+
+        # Fetch ALL pending records so we can sync by dependency order
+        all_pending = SyncQueue.get_batch(10000)
+
+        if not all_pending:
             return {'success': True, 'message': 'Nothing to sync', 'synced': 0}
-        
+
+        # Group by model
         by_model = defaultdict(list)
-        for record in pending:
+        for record in all_pending:
             by_model[record.model_name].append(record)
-        
+
         synced_uuids = []
 
-        MODEL_ORDER = [
-            'main.user',
-            'main.category', 
-            'main.deliveryperson',
-            'main.product',
-            'main.order',
-            'main.orderitem',
-            'main.cashregister',
-            'main.inkassa',
-        ]
-
+        # Sort models by dependency order (parents first)
         sorted_models = sorted(
             by_model.keys(),
-            key=lambda m: MODEL_ORDER.index(m.lower()) if m.lower() in MODEL_ORDER else 999
+            key=lambda m: cls.MODEL_ORDER.index(m.lower()) if m.lower() in cls.MODEL_ORDER else 999
         )
-        
+
         for model_name in sorted_models:
             records = by_model[model_name]
-            try:
-                sync_result = cls._sync_model_batch(model_name, records)
-                
-                if sync_result['success']:
-                    synced_uuids.extend(sync_result['synced_uuids'])
-                    result['synced'] += len(sync_result['synced_uuids'])
-                else:
-                    result['failed'] += len(records)
-                    result['errors'].append(f"{model_name}: {sync_result.get('error', 'Unknown error')}")
-                    
-            except Exception as e:
-                result['failed'] += len(records)
-                result['errors'].append(f"{model_name}: {str(e)}")
-                logger.exception(f"Error syncing {model_name}")
-        
+            # Send in batches per model type
+            for i in range(0, len(records), batch_size):
+                batch = records[i:i + batch_size]
+                try:
+                    sync_result = cls._sync_model_batch(model_name, batch)
+
+                    if sync_result['success']:
+                        synced_uuids.extend(sync_result['synced_uuids'])
+                        result['synced'] += len(sync_result['synced_uuids'])
+                    else:
+                        result['failed'] += len(batch)
+                        result['errors'].append(f"{model_name}: {sync_result.get('error', 'Unknown error')}")
+                        break  # Stop batching this model if a batch fails
+
+                except Exception as e:
+                    result['failed'] += len(batch)
+                    result['errors'].append(f"{model_name}: {str(e)}")
+                    logger.exception(f"Error syncing {model_name}")
+                    break
+
         if synced_uuids:
             SyncQueue.remove(synced_uuids)
-        
+
         SyncStatusTracker.update(
             last_sync=timezone.now().isoformat(),
             last_error=result['errors'][0] if result['errors'] else None
         )
-        
+
         result['completed_at'] = timezone.now().isoformat()
-        
+
         return result
     
     @classmethod
