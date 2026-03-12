@@ -362,7 +362,7 @@ class ProductionOrderService(BaseService):
         
         if po.status != ProductionOrder.Status.DRAFT:
             raise BusinessRuleError(f"Cannot plan order in {po.status} status")
-        
+    
         availability = cls.check_ingredient_availability(po_id)
         
         if not availability["ingredients"] and availability["all_available"]:
