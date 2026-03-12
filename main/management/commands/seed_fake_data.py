@@ -513,8 +513,10 @@ class Command(BaseCommand):
         display_counter = 1
 
         for i in range(num_orders):
-            # Spread orders across last 30 days with more recent ones
-            days_ago = random.randint(60, 120)
+            days_ago = random.choices(
+                range(121),
+                weights=[121 - d for d in range(121)]
+            )[0]
 
             hour = random.choices(
                 range(24),
