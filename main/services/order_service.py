@@ -159,6 +159,7 @@ class OrderService:
                 'is_paid': order.is_paid,
                 'total_amount': str(order.total_amount or 0),
                 'total_amount': str(order.total_amount or 0),
+                'items_count': str(order.items.count() or 0),
                 'items': list(order.items.values(
                     'id', 'product__id', 'product__name', 'product__category__id',
                     'product__category__name', 'quantity', 'detail', 'price', 'ready_at'
