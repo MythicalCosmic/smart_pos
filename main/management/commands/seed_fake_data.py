@@ -514,14 +514,20 @@ class Command(BaseCommand):
 
         for i in range(num_orders):
             # Spread orders across last 30 days with more recent ones
-            days_ago = random.choices(range(31), weights=[30-d for d in range(31)])[0]
+            days_ago = random.randint(60, 120)
+
             hour = random.choices(
                 range(24),
                 weights=[0,0,0,0,0,0,0,1,3,5,8,10,12,10,8,6,5,7,9,11,8,5,2,1]
             )[0]
+
             minute = random.randint(0, 59)
+
             order_time = (now - timedelta(days=days_ago)).replace(
-                hour=hour, minute=minute, second=random.randint(0, 59), microsecond=0
+                hour=hour,
+                minute=minute,
+                second=random.randint(0, 59),
+                microsecond=0
             )
 
             cashier = random.choice(self.cashiers) if self.cashiers else self.users[0]
