@@ -32,44 +32,70 @@ def _notify_order(event: str, order=None, order_id=None):
 
 
 def _handle_stock_for_order(order, old_status, new_status):
-    """Schedule stock handling to run after the current transaction commits."""
-    order_id = order.id
+    """Handle stock deduction/reversal when order status changes."""
+    import logging
+    logger = logging.getLogger(__name__)
 
-    def run():
-        try:
-            from stock.services.order_service import OrderStatusHandler
-            from stock.services.settings_service import StockSettingsService
-            from django.contrib.auth.models import User as AuthUser
+    try:
+        from stock.services.order_service import OrderStatusHandler
+        from stock.services.settings_service import StockSettingsService
+        from django.contrib.auth.models import User as AuthUser
 
-            location_id = StockSettingsService.get_default_location_id()
-            if not location_id:
-                return
+        location_id = StockSettingsService.get_default_location_id()
+        if not location_id:
+            return
 
-            auth_user = AuthUser.objects.filter(is_superuser=True).first()
-            if not auth_user:
-                return
+        auth_user = AuthUser.objects.filter(is_superuser=True).first()
+        if not auth_user:
+            return
 
-            order_items = [
-                {"product_id": item.product_id, "quantity": item.quantity}
-                for item in OrderItem.objects.filter(order_id=order_id)
-            ]
+        order_items = [
+            {"product_id": item.product_id, "quantity": item.quantity}
+            for item in OrderItem.objects.filter(order_id=order.id)
+        ]
 
-            if not order_items:
-                return
+        if not order_items:
+            return
 
-            OrderStatusHandler.on_status_change(
-                order_id=order_id,
-                old_status=old_status,
-                new_status=new_status,
-                order_items=order_items,
-                location_id=location_id,
-                user_id=auth_user.id
-            )
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"Stock error for order {order_id}: {e}")
+        OrderStatusHandler.on_status_change(
+            order_id=order.id,
+            old_status=old_status,
+            new_status=new_status,
+            order_items=order_items,
+            location_id=location_id,
+            user_id=auth_user.id
+        )
+    except Exception as e:
+        logger.error(f"[STOCK] Error for order {order.id}: {e}", exc_info=True)
 
-    transaction.on_commit(run)
+
+def _handle_stock_for_item_change(order_id, product_id, quantity_delta):
+    """Handle stock adjustment when items change in an order that already had stock deducted."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        from stock.services.order_service import OrderStockService
+        from stock.services.settings_service import StockSettingsService
+        from django.contrib.auth.models import User as AuthUser
+
+        location_id = StockSettingsService.get_default_location_id()
+        if not location_id:
+            return
+
+        auth_user = AuthUser.objects.filter(is_superuser=True).first()
+        if not auth_user:
+            return
+
+        OrderStockService.adjust_for_item_change(
+            order_id=order_id,
+            product_id=product_id,
+            quantity_delta=quantity_delta,
+            location_id=location_id,
+            user_id=auth_user.id,
+        )
+    except Exception as e:
+        logger.error(f"[STOCK] Item change error for order {order_id}: {e}", exc_info=True)
 
 
 class OrderService:
@@ -365,8 +391,9 @@ class OrderService:
                 order.ready_at = None
                 order.status = 'PREPARING'
                 order.save(update_fields=['ready_at', 'status'])
-            
+
             OrderService._recalculate_order_total(order)
+            _handle_stock_for_item_change(order.id, product_id, quantity)
             return {'success': True, 'message': 'Item added to order successfully'}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
@@ -387,12 +414,24 @@ class OrderService:
             
             if order.status != 'PREPARING':
                 return {'success': False, 'message': 'Cannot modify order that is not in PREPARING status'}
-            
+
             if quantity <= 0:
                 return {'success': False, 'message': 'Quantity must be greater than 0'}
-            
-            OrderItem.objects.filter(id=item_id, order=order).update(quantity=quantity)
+
+            item = OrderItem.objects.filter(id=item_id, order=order).first()
+            if not item:
+                return {'success': False, 'message': 'Order item not found'}
+
+            old_quantity = item.quantity
+            item.quantity = quantity
+            item.save(update_fields=['quantity'])
+
             OrderService._recalculate_order_total(order)
+
+            quantity_delta = quantity - old_quantity
+            if quantity_delta != 0:
+                _handle_stock_for_item_change(order.id, item.product_id, quantity_delta)
+
             return {'success': True, 'message': 'Order item updated successfully'}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}
@@ -411,17 +450,23 @@ class OrderService:
             
             if order.status != 'PREPARING':
                 return {'success': False, 'message': 'Cannot modify order that is not in PREPARING status'}
-            
-            deleted, _ = OrderItem.objects.filter(id=item_id, order=order).delete()
-            if not deleted:
+
+            item = OrderItem.objects.filter(id=item_id, order=order).select_related('product').first()
+            if not item:
                 return {'success': False, 'message': 'Order item not found'}
-            
+
+            product_id = item.product_id
+            removed_quantity = item.quantity
+            item.delete()
+
             if order.items.count() == 0:
                 order.delete()
+                _handle_stock_for_item_change(order.id, product_id, -removed_quantity)
                 return {'success': True, 'message': 'Order deleted (no items remaining)'}
 
             OrderService._check_and_update_order_ready_status(order)
             OrderService._recalculate_order_total(order)
+            _handle_stock_for_item_change(order.id, product_id, -removed_quantity)
             return {'success': True, 'message': 'Item removed from order successfully'}
         except Order.DoesNotExist:
             return {'success': False, 'message': 'Order not found'}

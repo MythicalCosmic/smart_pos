@@ -372,6 +372,94 @@ class OrderStockService:
         }, f"Released {len(releases)} reservation(s)")
 
 
+    @classmethod
+    @transaction.atomic
+    def adjust_for_item_change(cls,
+                               order_id: int,
+                               product_id: int,
+                               quantity_delta: int,
+                               location_id: int,
+                               user_id: int) -> Dict[str, Any]:
+        """
+        Adjust stock when items change in an order that already had stock deducted.
+        quantity_delta > 0: more items added/increased -> deduct more stock
+        quantity_delta < 0: items removed/decreased -> return stock
+        """
+        settings = StockSettings.load()
+
+        if not settings.stock_enabled or not settings.auto_deduct_on_sale:
+            return success_response({
+                "skipped": True,
+                "reason": "Stock disabled or auto-deduct off"
+            })
+
+        from stock.models import StockTransaction
+        if not StockTransaction.objects.filter(
+            order_id=order_id, movement_type="SALE_OUT"
+        ).exists():
+            return success_response({
+                "skipped": True,
+                "reason": "No prior deductions for this order"
+            })
+
+        if quantity_delta == 0:
+            return success_response({
+                "skipped": True,
+                "reason": "No quantity change"
+            })
+
+        deduction_items = ProductStockLinkService.get_deduction_items(
+            product_id, abs(quantity_delta)
+        )
+
+        if not deduction_items:
+            return success_response({
+                "skipped": True,
+                "reason": "Product not linked to stock"
+            })
+
+        adjustments = []
+
+        for item in deduction_items:
+            if quantity_delta > 0:
+                result = StockLevelService.adjust(
+                    stock_item_id=item["stock_item_id"],
+                    location_id=location_id,
+                    quantity=-item["quantity"],
+                    movement_type="SALE_OUT",
+                    user_id=user_id,
+                    unit_id=item.get("unit_id"),
+                    order_id=order_id,
+                    notes=f"Item added/increased in order #{order_id} - Product #{product_id}"
+                )
+            else:
+                result = StockLevelService.adjust(
+                    stock_item_id=item["stock_item_id"],
+                    location_id=location_id,
+                    quantity=item["quantity"],
+                    movement_type="RETURN_FROM_CUSTOMER",
+                    user_id=user_id,
+                    unit_id=item.get("unit_id"),
+                    order_id=order_id,
+                    notes=f"Item removed/decreased in order #{order_id} - Product #{product_id}"
+                )
+
+            adjustments.append({
+                "stock_item_id": item["stock_item_id"],
+                "quantity": str(item["quantity"]),
+                "direction": "deduct" if quantity_delta > 0 else "return",
+                "transaction_id": result.get("transaction_id")
+            })
+
+        direction = "deducted" if quantity_delta > 0 else "returned"
+        return success_response({
+            "order_id": order_id,
+            "product_id": product_id,
+            "quantity_delta": quantity_delta,
+            "adjustments": adjustments
+        }, f"Stock {direction} for {len(adjustments)} item(s)")
+
+
 class OrderStatusHandler:
 
     

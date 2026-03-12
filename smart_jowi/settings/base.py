@@ -20,7 +20,7 @@ DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
-GEMINI_API_KEY = 'AIzaSyDq60ysKtvM1QzrKIw6evUtkbYWtUkv2ko'
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', None)
 # Application definition
 INSTALLED_APPS = [
     "unfold", 

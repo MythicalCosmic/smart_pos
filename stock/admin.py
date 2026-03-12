@@ -953,6 +953,7 @@ class ProductStockLinkAdmin(ModelAdmin):
                     'stock_item_display', 'qty_per_sale', 'deduct_on_badge', 'is_active_badge']
     list_filter = ['link_type', 'deduct_on_status', 'is_active']
     search_fields = ['product__name']
+    autocomplete_fields = ['product', 'recipe', 'stock_item', 'unit']
     list_filter_submit = True
     list_fullwidth = True
     inlines = [ProductComponentStockInline]
@@ -1031,6 +1032,10 @@ class StockSettingsAdmin(ModelAdmin):
         }),
         (_('Costing'), {
             'fields': ('costing_method', 'include_waste_in_cost'),
+            'classes': ['tab'],
+        }),
+        (_('Default Locations'), {
+            'fields': ('default_location', 'default_production_location', 'default_receiving_location'),
             'classes': ['tab'],
         }),
         (_('Alerts'), {
