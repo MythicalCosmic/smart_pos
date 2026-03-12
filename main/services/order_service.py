@@ -31,6 +31,47 @@ def _notify_order(event: str, order=None, order_id=None):
     Thread(target=send, daemon=True).start()
 
 
+def _handle_stock_for_order(order, old_status, new_status):
+    """Schedule stock handling to run after the current transaction commits."""
+    order_id = order.id
+
+    def run():
+        try:
+            from stock.services.order_service import OrderStatusHandler
+            from stock.services.settings_service import StockSettingsService
+            from django.contrib.auth.models import User as AuthUser
+
+            location_id = StockSettingsService.get_default_location_id()
+            if not location_id:
+                return
+
+            auth_user = AuthUser.objects.filter(is_superuser=True).first()
+            if not auth_user:
+                return
+
+            order_items = [
+                {"product_id": item.product_id, "quantity": item.quantity}
+                for item in OrderItem.objects.filter(order_id=order_id)
+            ]
+
+            if not order_items:
+                return
+
+            OrderStatusHandler.on_status_change(
+                order_id=order_id,
+                old_status=old_status,
+                new_status=new_status,
+                order_items=order_items,
+                location_id=location_id,
+                user_id=auth_user.id
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Stock error for order {order_id}: {e}")
+
+    transaction.on_commit(run)
+
+
 class OrderService:
     
     ALLOWED_STATUSES = ['PREPARING', 'READY', 'CANCELLED']
@@ -96,11 +137,12 @@ class OrderService:
         
         if cashier_id:
             queryset = queryset.filter(cashier_id=cashier_id)
-        
+     
         queryset = queryset.order_by(order_by)
+        from decimal import Decimal, InvalidOperation
+
         paginator = Paginator(queryset, per_page)
         page_obj = paginator.get_page(page)
-        
         orders = []
         for order in page_obj.object_list:
             orders.append({
@@ -115,8 +157,8 @@ class OrderService:
                 } if order.cashier else None,
                 'status': order.status,
                 'is_paid': order.is_paid,
-                'total_amount': str(order.total_amount),
-                'items_count': order.items.count(),
+                'total_amount': str(order.total_amount or 0),
+                'total_amount': str(order.total_amount or 0),
                 'items': list(order.items.values(
                     'id', 'product__id', 'product__name', 'product__category__id',
                     'product__category__name', 'quantity', 'detail', 'price', 'ready_at'
@@ -285,7 +327,9 @@ class OrderService:
             OrderItem.objects.bulk_create(order_items)
             order.total_amount = total_amount
             order.save(update_fields=['total_amount'])
-            
+
+            _handle_stock_for_order(order, None, 'PREPARING')
+
             _notify_order('new', order=order)
             
             return {'success': True, 'order': order, 'message': 'Order created successfully'}
@@ -397,6 +441,7 @@ class OrderService:
             if order.status == 'CANCELLED':
                 return {'success': False, 'message': 'Cannot update cancelled order'}
 
+            old_status = order.status
             update_fields = ['status']
             order.status = status
 
@@ -407,6 +452,8 @@ class OrderService:
                 update_fields.append('ready_at')
 
             order.save(update_fields=update_fields)
+
+            _handle_stock_for_order(order, old_status, status)
 
             if status == 'READY':
                 _notify_order('ready', order_id=order_id)
@@ -525,9 +572,11 @@ class OrderService:
         all_items_ready = total_items > 0 and total_items == ready_items
         
         if all_items_ready and order.status != 'READY':
+            old_status = order.status
             order.status = 'READY'
             order.ready_at = timezone.now()
             order.save(update_fields=['status', 'ready_at'])
+            _handle_stock_for_order(order, old_status, 'READY')
             return True, True
         
         return all_items_ready, False
@@ -552,6 +601,8 @@ class OrderService:
             order.paid_at = timezone.now()
             order.save(update_fields=['is_paid', 'paid_at'])
 
+            _handle_stock_for_order(order, order.status, 'PAID')
+
             InkassaService.add_to_register(order.total_amount)
             _notify_order('status_change', order_id=order_id)
             return {'success': True, 'message': 'Order marked as paid', 'is_paid': True}
@@ -572,11 +623,14 @@ class OrderService:
             
             if order.status == 'READY':
                 return {'success': False, 'message': 'Order is already ready'}
-            
+
+            old_status = order.status
             now = timezone.now()
             order.status = 'READY'
             order.ready_at = now
             order.save(update_fields=['status', 'ready_at'])
+
+            _handle_stock_for_order(order, old_status, 'READY')
             order.items.filter(ready_at__isnull=True).update(ready_at=now)
 
             order_prep_time = (order.ready_at - order.created_at).total_seconds()

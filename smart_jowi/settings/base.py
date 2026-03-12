@@ -314,6 +314,17 @@ UNFOLD = {
                     },
                 ],
             },
+            {
+                "title": "Settings",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Stock Settings",
+                        "icon": "tune",
+                        "link": reverse_lazy("admin:stock_stocksettings_changelist"),
+                    },
+                ],
+            },
         ],
     },
 }
@@ -355,3 +366,4 @@ SPECTACULAR_SETTINGS = {
         }
     },
 }
+

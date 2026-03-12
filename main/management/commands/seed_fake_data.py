@@ -21,6 +21,7 @@ from stock.models import (
     Supplier, SupplierStockItem,
     Recipe, RecipeIngredient, RecipeStep,
     VarianceReasonCode,
+    ProductStockLink, StockSettings,
 )
 
 
@@ -51,6 +52,8 @@ class Command(BaseCommand):
         self._create_variance_codes()
         self._create_orders(num_orders)
         self._create_stock_transactions()
+        self._create_product_stock_links()
+        self._create_stock_settings()
         self._create_inkassa()
         self._create_cash_register()
 
@@ -625,6 +628,101 @@ class Command(BaseCommand):
                 )
                 txn_count += 1
         self.stdout.write(f'  Transactions: {txn_count}')
+
+    # ── Product-Stock Links ──
+    def _create_product_stock_links(self):
+        products_by_name = {p.name: p for p in self.products}
+        recipes_by_code = {r.code: r for r in Recipe.objects.all()}
+        link_count = 0
+
+        # (product_name, link_type, recipe_code_or_None, stock_item_name_or_None, qty, unit_name)
+        links_data = [
+            # Burgers
+            ('Classic Burger', 'RECIPE', 'RCP-001', None, 1, 'Piece'),
+            ('Cheeseburger', 'DIRECT_ITEM', None, 'Beef Patty', 180, 'Gram'),
+            ('Double Burger', 'DIRECT_ITEM', None, 'Beef Patty', 300, 'Gram'),
+            ('Chicken Burger', 'DIRECT_ITEM', None, 'Chicken Breast', 180, 'Gram'),
+            ('Spicy Burger', 'DIRECT_ITEM', None, 'Beef Patty', 150, 'Gram'),
+            ('BBQ Burger', 'DIRECT_ITEM', None, 'Beef Patty', 150, 'Gram'),
+            ('Veggie Burger', 'DIRECT_ITEM', None, 'Burger Bun', 1, 'Piece'),
+            ('Fish Burger', 'DIRECT_ITEM', None, 'Burger Bun', 1, 'Piece'),
+            # Hot Dogs
+            ('Classic Hot Dog', 'DIRECT_ITEM', None, 'Beef Sausage', 1, 'Piece'),
+            ('Cheese Hot Dog', 'DIRECT_ITEM', None, 'Beef Sausage', 1, 'Piece'),
+            ('Chili Dog', 'DIRECT_ITEM', None, 'Beef Sausage', 1, 'Piece'),
+            ('Jumbo Hot Dog', 'DIRECT_ITEM', None, 'Beef Sausage', 2, 'Piece'),
+            # Chicken
+            ('Fried Chicken (3pc)', 'DIRECT_ITEM', None, 'Chicken Breast', 450, 'Gram'),
+            ('Fried Chicken (6pc)', 'DIRECT_ITEM', None, 'Chicken Breast', 900, 'Gram'),
+            ('Chicken Wings (8pc)', 'DIRECT_ITEM', None, 'Chicken Wings', 400, 'Gram'),
+            ('Chicken Nuggets (9pc)', 'DIRECT_ITEM', None, 'Chicken Nuggets (frozen)', 9, 'Piece'),
+            ('Grilled Chicken', 'DIRECT_ITEM', None, 'Chicken Breast', 300, 'Gram'),
+            ('Chicken Strips', 'DIRECT_ITEM', None, 'Chicken Breast', 250, 'Gram'),
+            # Sides
+            ('French Fries (S)', 'DIRECT_ITEM', None, 'French Fries (frozen)', 150, 'Gram'),
+            ('French Fries (L)', 'DIRECT_ITEM', None, 'French Fries (frozen)', 250, 'Gram'),
+            ('Onion Rings', 'DIRECT_ITEM', None, 'Onion', 100, 'Gram'),
+            ('Mozzarella Sticks', 'DIRECT_ITEM', None, 'Mozzarella', 80, 'Gram'),
+            ('Corn on the Cob', 'DIRECT_ITEM', None, 'Corn', 1, 'Piece'),
+            # Drinks
+            ('Coca-Cola (0.5L)', 'DIRECT_ITEM', None, 'Coca-Cola Syrup', 50, 'Milliliter'),
+            ('Fresh Juice', 'DIRECT_ITEM', None, 'Orange Juice', 300, 'Milliliter'),
+            ('Milkshake', 'RECIPE', 'RCP-004', None, 1, 'Piece'),
+            # Desserts
+            ('Ice Cream (1 scoop)', 'DIRECT_ITEM', None, 'Ice Cream Base', 100, 'Milliliter'),
+            ('Ice Cream (3 scoops)', 'DIRECT_ITEM', None, 'Ice Cream Base', 300, 'Milliliter'),
+            # Wraps
+            ('Chicken Shawarma', 'RECIPE', 'RCP-002', None, 1, 'Piece'),
+            ('Beef Shawarma', 'DIRECT_ITEM', None, 'Beef Patty', 180, 'Gram'),
+            ('Chicken Wrap', 'DIRECT_ITEM', None, 'Chicken Breast', 150, 'Gram'),
+            ('Veggie Wrap', 'DIRECT_ITEM', None, 'Tortilla Wrap', 1, 'Piece'),
+        ]
+
+        for prod_name, link_type, recipe_code, si_name, qty, unit_name in links_data:
+            product = products_by_name.get(prod_name)
+            if not product:
+                continue
+
+            defaults = {
+                'link_type': link_type,
+                'quantity_per_sale': Decimal(str(qty)),
+                'unit': self.units.get(unit_name),
+                'deduct_on_status': 'PREPARING',
+                'is_active': True,
+            }
+
+            if link_type == 'RECIPE' and recipe_code:
+                recipe = recipes_by_code.get(recipe_code)
+                if not recipe:
+                    continue
+                defaults['recipe'] = recipe
+            elif link_type == 'DIRECT_ITEM' and si_name:
+                si = self.stock_items.get(si_name)
+                if not si:
+                    continue
+                defaults['stock_item'] = si
+
+            _, created = ProductStockLink.objects.get_or_create(
+                product=product, defaults=defaults
+            )
+            if created:
+                link_count += 1
+
+        self.stdout.write(f'  Product-Stock links: {link_count}')
+
+    # ── Stock Settings ──
+    def _create_stock_settings(self):
+        settings = StockSettings.load()
+        settings.stock_enabled = True
+        settings.auto_deduct_on_sale = True
+        settings.deduct_on_order_status = 'PREPARING'
+        settings.allow_negative_stock = True
+        settings.track_cost = True
+        settings.track_batches = True
+        settings.low_stock_alert_enabled = True
+        settings.default_location = self.locations.get('Main Warehouse')
+        settings.save()
+        self.stdout.write(f'  Stock settings: enabled={settings.stock_enabled}, auto_deduct={settings.auto_deduct_on_sale}')
 
     # ── Inkassa ──
     def _create_inkassa(self):

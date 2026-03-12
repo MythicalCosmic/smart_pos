@@ -15,6 +15,8 @@ from unfold.contrib.filters.admin import (
 )
 from datetime import timedelta
 
+from django.shortcuts import redirect
+
 from .models import (
     StockLocation, StockUnit, StockCategory, StockItem, StockItemUnit,
     StockLevel, StockBatch, StockTransaction,
@@ -25,6 +27,7 @@ from .models import (
     ProductStockLink, ProductComponentStock,
     StockTransfer, StockTransferItem,
     StockCount, StockCountItem, VarianceReasonCode,
+    StockSettings,
 )
 
 
@@ -1001,6 +1004,72 @@ class ProductStockLinkAdmin(ModelAdmin):
     @display(description=_("Active"), boolean=True)
     def is_active_badge(self, obj):
         return obj.is_active
+
+
+# ─────────────────────────────────────────────
+# STOCK SETTINGS (singleton)
+# ─────────────────────────────────────────────
+@admin.register(StockSettings)
+class StockSettingsAdmin(ModelAdmin):
+    list_display = ['__str__', 'stock_enabled_badge', 'auto_deduct_badge',
+                    'deduct_on_display', 'costing_method', 'production_badge', 'purchasing_badge']
+    list_fullwidth = True
+
+    fieldsets = (
+        (_('Master Controls'), {
+            'fields': ('stock_enabled', 'production_enabled', 'purchasing_enabled', 'multi_location_enabled'),
+            'classes': ['tab'],
+        }),
+        (_('Sale Deduction'), {
+            'fields': ('auto_deduct_on_sale', 'deduct_on_order_status', 'reserve_on_order_create',
+                       'allow_negative_stock', 'auto_create_production'),
+            'classes': ['tab'],
+        }),
+        (_('Tracking'), {
+            'fields': ('track_cost', 'track_batches', 'track_expiry', 'track_serial_numbers'),
+            'classes': ['tab'],
+        }),
+        (_('Costing'), {
+            'fields': ('costing_method', 'include_waste_in_cost'),
+            'classes': ['tab'],
+        }),
+        (_('Alerts'), {
+            'fields': ('low_stock_alert_enabled', 'expiry_alert_enabled',
+                       'expiry_alert_days', 'negative_stock_alert'),
+            'classes': ['tab'],
+        }),
+    )
+
+    def changelist_view(self, request, extra_context=None):
+        obj = StockSettings.load()
+        return redirect(reverse('admin:stock_stocksettings_change', args=[obj.pk]))
+
+    def has_add_permission(self, request):
+        return not StockSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @display(description=_("Stock System"), boolean=True)
+    def stock_enabled_badge(self, obj):
+        return obj.stock_enabled
+
+    @display(description=_("Auto Deduct"), boolean=True)
+    def auto_deduct_badge(self, obj):
+        return obj.auto_deduct_on_sale
+
+    @display(description=_("Deduct On"))
+    def deduct_on_display(self, obj):
+        colors = {'PREPARING': 'warning', 'READY': 'success', 'PAID': 'info', 'CREATED': 'danger'}
+        return colors.get(obj.deduct_on_order_status, 'info'), obj.deduct_on_order_status
+
+    @display(description=_("Production"), boolean=True)
+    def production_badge(self, obj):
+        return obj.production_enabled
+
+    @display(description=_("Purchasing"), boolean=True)
+    def purchasing_badge(self, obj):
+        return obj.purchasing_enabled
 
 
 # ─────────────────────────────────────────────

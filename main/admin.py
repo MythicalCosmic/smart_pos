@@ -7,6 +7,7 @@ from django import forms
 from django.contrib.auth.hashers import make_password
 from django.utils.text import slugify
 from unfold.admin import ModelAdmin, TabularInline
+from decimal import InvalidOperation
 from unfold.decorators import display
 
 from unfold.contrib.filters.admin import (
@@ -42,9 +43,12 @@ class OrderItemInline(TabularInline):
     
     @display(description=_("Subtotal"))
     def subtotal(self, obj):
-        if obj.pk:
-            return f"${obj.price * obj.quantity:.2f}"
-        return "-"
+        if obj and obj.price is not None and obj.quantity is not None:
+            try:
+                return f"${(obj.price * obj.quantity):.2f}"
+            except:
+                return "$0.00"
+        return "$0.00"
 
 
 class UserAdminForm(forms.ModelForm):
@@ -505,8 +509,9 @@ class OrderAdmin(ModelAdmin):
     
     @display(description=_("Total"), ordering='total_amount')
     def total_amount_display(self, obj):
-        return f"${obj.total_amount:.2f}"
-    
+        return f"{obj.total_amount}" if obj.total_amount else "0.00"
+
+
     @display(description=_("Items"))
     def items_count(self, obj):
         return obj.items.count()
