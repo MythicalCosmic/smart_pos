@@ -356,6 +356,12 @@ class SyncService:
             
             if response.status_code == 200:
                 data = response.json()
+                errors = data.get('errors', [])
+                if errors and data.get('created', 0) == 0 and data.get('updated', 0) == 0:
+                    return {
+                        'success': False,
+                        'error': f"Cloud rejected all records: {errors[0][:200]}"
+                    }
                 return {
                     'success': True,
                     'synced_uuids': [r.uuid for r in records],
