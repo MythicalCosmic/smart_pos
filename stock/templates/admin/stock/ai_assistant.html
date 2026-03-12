@@ -1,702 +1,892 @@
 {% extends "admin/base.html" %}
 {% load i18n unfold %}
 
-{% block title %}AI Stock Assistant{% endblock %}
+{% block title %}AI Assistant{% endblock %}
 
 {% block content %}
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
     :root {
-        --ai-primary: #6366f1;
-        --ai-primary-light: #818cf8;
-        --ai-primary-glow: rgba(99, 102, 241, 0.3);
-        --ai-emerald: #10b981;
-        --ai-amber: #f59e0b;
-        --ai-rose: #f43f5e;
-        --ai-cyan: #06b6d4;
-        --ai-violet: #8b5cf6;
-        --ai-surface: rgba(255, 255, 255, 0.03);
-        --ai-surface-hover: rgba(255, 255, 255, 0.06);
-        --ai-border: rgba(255, 255, 255, 0.08);
-        --ai-text: #e2e8f0;
-        --ai-text-dim: #94a3b8;
-        --ai-bg-dark: #0f1115;
-        --ai-bg-card: #1a1d23;
-        --ai-bg-input: #12141a;
+        --c-bg: #0a0a0a;
+        --c-surface: #141414;
+        --c-surface-2: #1a1a1a;
+        --c-surface-3: #222;
+        --c-border: rgba(255,255,255,0.08);
+        --c-border-2: rgba(255,255,255,0.12);
+        --c-text: #ececec;
+        --c-text-2: #a0a0a0;
+        --c-text-3: #666;
+        --c-accent: #c4956a;
+        --c-accent-2: #d4a574;
+        --c-accent-glow: rgba(196,149,106,0.15);
+        --c-blue: #6b9eff;
+        --c-green: #5ec269;
+        --c-red: #e5534b;
+        --c-orange: #d49157;
+        --c-purple: #b48ead;
     }
 
-    .ai-container {
-        font-family: 'Plus Jakarta Sans', sans-serif;
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 0;
-        min-height: 80vh;
+    * { box-sizing: border-box; }
+
+    .ai-root {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        max-width: 860px;
+        margin: -1rem auto 0;
         display: flex;
         flex-direction: column;
-    }
-
-    /* ── Ambient Background ── */
-    .ai-ambient {
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        pointer-events: none;
-        z-index: 0;
-        overflow: hidden;
-    }
-    .ai-ambient .orb {
-        position: absolute;
-        border-radius: 50%;
-        filter: blur(80px);
-        animation: orbFloat 20s ease-in-out infinite;
-    }
-    .ai-ambient .orb-1 {
-        width: 400px; height: 400px;
-        background: rgba(99, 102, 241, 0.08);
-        top: -100px; left: -100px;
-        animation-delay: 0s;
-    }
-    .ai-ambient .orb-2 {
-        width: 350px; height: 350px;
-        background: rgba(16, 185, 129, 0.06);
-        bottom: -50px; right: -50px;
-        animation-delay: -7s;
-    }
-    .ai-ambient .orb-3 {
-        width: 300px; height: 300px;
-        background: rgba(139, 92, 246, 0.05);
-        top: 40%; left: 60%;
-        animation-delay: -14s;
-    }
-    @keyframes orbFloat {
-        0%, 100% { transform: translate(0, 0) scale(1); }
-        25% { transform: translate(30px, -20px) scale(1.05); }
-        50% { transform: translate(-20px, 30px) scale(0.95); }
-        75% { transform: translate(20px, 20px) scale(1.02); }
+        height: calc(100vh - 80px);
+        min-height: 500px;
+        position: relative;
     }
 
     /* ── Header ── */
-    .ai-header {
-        position: relative;
-        z-index: 1;
-        padding: 2rem 2rem 1.5rem;
-        border-bottom: 1px solid var(--ai-border);
-        background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.04) 100%);
-        backdrop-filter: blur(20px);
-        margin: -1rem -1rem 0 -1rem;
-    }
-    .ai-header-content {
+    .ai-head {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--c-border);
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 0.875rem;
+        flex-shrink: 0;
     }
-    .ai-logo {
-        width: 48px; height: 48px;
-        background: linear-gradient(135deg, var(--ai-primary) 0%, var(--ai-violet) 100%);
-        border-radius: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 24px;
-        box-shadow: 0 4px 20px var(--ai-primary-glow);
-        animation: logoPulse 3s ease-in-out infinite;
-        color: white;
+    .ai-head-logo {
+        width: 36px; height: 36px;
+        background: linear-gradient(135deg, var(--c-accent) 0%, #a67c52 100%);
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 18px;
+        flex-shrink: 0;
     }
-    @keyframes logoPulse {
-        0%, 100% { box-shadow: 0 4px 20px var(--ai-primary-glow); }
-        50% { box-shadow: 0 4px 30px rgba(99, 102, 241, 0.5); }
-    }
-    .ai-header h1 {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: var(--ai-text);
+    .ai-head-info h1 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--c-text);
         margin: 0;
-        letter-spacing: -0.02em;
+        letter-spacing: -0.01em;
     }
-    .ai-header p {
-        font-size: 0.85rem;
-        color: var(--ai-text-dim);
-        margin: 0.2rem 0 0;
+    .ai-head-info span {
+        font-size: 0.75rem;
+        color: var(--c-text-3);
+        font-weight: 400;
     }
-    .ai-status {
+    .ai-head-actions {
         margin-left: auto;
         display: flex;
-        align-items: center;
         gap: 0.5rem;
-        font-size: 0.8rem;
-        color: var(--ai-emerald);
     }
-    .ai-status-dot {
-        width: 8px; height: 8px;
-        background: var(--ai-emerald);
-        border-radius: 50%;
-        animation: statusBlink 2s ease-in-out infinite;
+    .ai-head-btn {
+        width: 32px; height: 32px;
+        border-radius: 8px;
+        border: 1px solid var(--c-border);
+        background: transparent;
+        color: var(--c-text-3);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: all 0.15s;
+        font-size: 16px;
     }
-    @keyframes statusBlink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.4; }
+    .ai-head-btn:hover {
+        background: var(--c-surface-2);
+        color: var(--c-text-2);
+        border-color: var(--c-border-2);
     }
 
     /* ── Chat Area ── */
-    .ai-chat {
-        position: relative;
-        z-index: 1;
+    .ai-messages {
         flex: 1;
         overflow-y: auto;
         padding: 1.5rem;
         display: flex;
         flex-direction: column;
-        gap: 1rem;
-        min-height: 400px;
-        max-height: 60vh;
+        gap: 0.25rem;
         scroll-behavior: smooth;
     }
-    .ai-chat::-webkit-scrollbar { width: 6px; }
-    .ai-chat::-webkit-scrollbar-track { background: transparent; }
-    .ai-chat::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    .ai-messages::-webkit-scrollbar { width: 5px; }
+    .ai-messages::-webkit-scrollbar-track { background: transparent; }
+    .ai-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 3px; }
+    .ai-messages::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
 
-    /* ── Messages ── */
-    .ai-msg {
-        display: flex;
-        gap: 0.75rem;
-        max-width: 85%;
-        animation: msgSlide 0.3s ease-out;
-    }
-    @keyframes msgSlide {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    .ai-msg-user {
-        align-self: flex-end;
-        flex-direction: row-reverse;
-    }
-    .ai-msg-avatar {
-        width: 32px; height: 32px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        flex-shrink: 0;
-        margin-top: 2px;
-    }
-    .ai-msg-ai .ai-msg-avatar {
-        background: linear-gradient(135deg, var(--ai-primary), var(--ai-violet));
-        color: white;
-    }
-    .ai-msg-user .ai-msg-avatar {
-        background: linear-gradient(135deg, var(--ai-emerald), var(--ai-cyan));
-        color: white;
-    }
-    .ai-msg-bubble {
-        padding: 0.85rem 1.1rem;
-        border-radius: 16px;
-        font-size: 0.9rem;
-        line-height: 1.6;
-        position: relative;
-    }
-    .ai-msg-ai .ai-msg-bubble {
-        background: var(--ai-bg-card);
-        border: 1px solid var(--ai-border);
-        color: var(--ai-text);
-        border-top-left-radius: 4px;
-    }
-    .ai-msg-user .ai-msg-bubble {
-        background: linear-gradient(135deg, var(--ai-primary), var(--ai-violet));
-        color: white;
-        border-top-right-radius: 4px;
-    }
-    .ai-msg-bubble pre {
-        background: rgba(0,0,0,0.3);
-        padding: 0.75rem;
-        border-radius: 8px;
-        overflow-x: auto;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.82rem;
-        margin: 0.5rem 0;
-    }
-    .ai-msg-time {
-        font-size: 0.7rem;
-        color: var(--ai-text-dim);
-        margin-top: 0.3rem;
-        text-align: right;
-    }
-    .ai-msg-user .ai-msg-time { text-align: left; }
-
-    /* ── Typing indicator ── */
-    .ai-typing {
-        display: none;
-        align-items: center;
-        gap: 0.75rem;
-        max-width: 85%;
-        animation: msgSlide 0.3s ease-out;
-    }
-    .ai-typing.active { display: flex; }
-    .ai-typing-dots {
-        display: flex;
-        gap: 4px;
-        padding: 1rem 1.2rem;
-        background: var(--ai-bg-card);
-        border: 1px solid var(--ai-border);
-        border-radius: 16px;
-        border-top-left-radius: 4px;
-    }
-    .ai-typing-dots span {
-        width: 8px; height: 8px;
-        background: var(--ai-primary-light);
-        border-radius: 50%;
-        animation: typingBounce 1.4s ease-in-out infinite;
-    }
-    .ai-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-    .ai-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes typingBounce {
-        0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-        30% { transform: translateY(-6px); opacity: 1; }
-    }
-
-    /* ── Quick Actions ── */
-    .ai-quick-actions {
-        position: relative;
-        z-index: 1;
-        padding: 0 1.5rem;
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-    .ai-quick-btn {
-        padding: 0.45rem 0.9rem;
-        border-radius: 20px;
-        border: 1px solid var(--ai-border);
-        background: var(--ai-surface);
-        color: var(--ai-text-dim);
-        font-size: 0.78rem;
-        font-family: 'Plus Jakarta Sans', sans-serif;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        white-space: nowrap;
-    }
-    .ai-quick-btn:hover {
-        background: var(--ai-surface-hover);
-        border-color: var(--ai-primary);
-        color: var(--ai-primary-light);
-        transform: translateY(-1px);
-    }
-
-    /* ── Input Area ── */
-    .ai-input-area {
-        position: relative;
-        z-index: 1;
-        padding: 1rem 1.5rem 1.5rem;
-        border-top: 1px solid var(--ai-border);
-        background: rgba(15, 17, 21, 0.5);
-        backdrop-filter: blur(20px);
-    }
-    .ai-input-wrap {
-        display: flex;
-        gap: 0.75rem;
-        align-items: flex-end;
-    }
-    .ai-input {
-        flex: 1;
-        background: var(--ai-bg-input);
-        border: 1px solid var(--ai-border);
-        border-radius: 14px;
-        padding: 0.85rem 1.1rem;
-        color: var(--ai-text);
-        font-size: 0.9rem;
-        font-family: 'Plus Jakarta Sans', sans-serif;
-        resize: none;
-        min-height: 46px;
-        max-height: 120px;
-        outline: none;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
-        line-height: 1.4;
-    }
-    .ai-input:focus {
-        border-color: var(--ai-primary);
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-    }
-    .ai-input::placeholder { color: var(--ai-text-dim); }
-    .ai-send-btn {
-        width: 46px; height: 46px;
-        border-radius: 14px;
-        border: none;
-        background: linear-gradient(135deg, var(--ai-primary), var(--ai-violet));
-        color: white;
-        font-size: 18px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s ease;
-        flex-shrink: 0;
-    }
-    .ai-send-btn:hover {
-        transform: scale(1.05);
-        box-shadow: 0 4px 20px var(--ai-primary-glow);
-    }
-    .ai-send-btn:active { transform: scale(0.95); }
-    .ai-send-btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none;
-    }
-    .ai-send-btn .spinner {
-        width: 18px; height: 18px;
-        border: 2px solid rgba(255,255,255,0.3);
-        border-top-color: white;
-        border-radius: 50%;
-        animation: spin 0.6s linear infinite;
-        display: none;
-    }
-    .ai-send-btn.loading .send-icon { display: none; }
-    .ai-send-btn.loading .spinner { display: block; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── Welcome Screen ── */
+    /* ── Welcome ── */
     .ai-welcome {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 3rem 2rem;
-        text-align: center;
         flex: 1;
+        padding: 2rem;
+        animation: fadeUp 0.5s ease;
     }
-    .ai-welcome-icon {
-        width: 80px; height: 80px;
-        background: linear-gradient(135deg, var(--ai-primary) 0%, var(--ai-violet) 100%);
-        border-radius: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 36px;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 8px 40px var(--ai-primary-glow);
-        animation: welcomePulse 4s ease-in-out infinite;
-        color: white;
+    @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
     }
-    @keyframes welcomePulse {
-        0%, 100% { transform: scale(1) rotate(0deg); box-shadow: 0 8px 40px var(--ai-primary-glow); }
-        25% { transform: scale(1.02) rotate(1deg); }
-        50% { transform: scale(1) rotate(0deg); box-shadow: 0 8px 50px rgba(99, 102, 241, 0.4); }
-        75% { transform: scale(1.01) rotate(-1deg); }
+    .ai-welcome-mark {
+        width: 56px; height: 56px;
+        background: linear-gradient(135deg, var(--c-accent) 0%, #a67c52 100%);
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 28px;
+        margin-bottom: 1.25rem;
+        position: relative;
+    }
+    .ai-welcome-mark::after {
+        content: '';
+        position: absolute;
+        inset: -8px;
+        border-radius: 20px;
+        background: var(--c-accent-glow);
+        filter: blur(20px);
+        z-index: -1;
     }
     .ai-welcome h2 {
-        font-size: 1.6rem;
-        font-weight: 700;
-        color: var(--ai-text);
-        margin: 0 0 0.5rem;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--c-text);
+        margin: 0 0 0.375rem;
         letter-spacing: -0.02em;
     }
-    .ai-welcome p {
-        color: var(--ai-text-dim);
-        font-size: 0.9rem;
-        max-width: 400px;
-        margin: 0 0 2rem;
-        line-height: 1.6;
+    .ai-welcome > p {
+        color: var(--c-text-3);
+        font-size: 0.8rem;
+        margin: 0 0 1.75rem;
     }
-    .ai-welcome-grid {
+    .ai-cards {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 0.75rem;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.625rem;
         width: 100%;
-        max-width: 700px;
+        max-width: 640px;
     }
-    .ai-welcome-card {
-        background: var(--ai-bg-card);
-        border: 1px solid var(--ai-border);
+    .ai-card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
         border-radius: 12px;
-        padding: 1rem;
-        text-align: left;
+        padding: 0.875rem;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.2s;
+        text-align: left;
+        position: relative;
+        overflow: hidden;
     }
-    .ai-welcome-card:hover {
-        border-color: var(--ai-primary);
-        background: var(--ai-surface-hover);
-        transform: translateY(-2px);
-        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    .ai-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 2px;
+        background: var(--card-accent, var(--c-accent));
+        opacity: 0;
+        transition: opacity 0.2s;
     }
-    .ai-welcome-card-icon {
-        font-size: 1.4rem;
+    .ai-card:hover {
+        border-color: var(--c-border-2);
+        background: var(--c-surface-2);
+        transform: translateY(-1px);
+    }
+    .ai-card:hover::before { opacity: 1; }
+    .ai-card-icon {
+        font-size: 1.1rem;
         margin-bottom: 0.5rem;
         display: block;
+        opacity: 0.8;
     }
-    .ai-welcome-card h4 {
-        font-size: 0.85rem;
+    .ai-card h4 {
+        font-size: 0.78rem;
         font-weight: 600;
-        color: var(--ai-text);
-        margin: 0 0 0.25rem;
+        color: var(--c-text);
+        margin: 0 0 0.2rem;
     }
-    .ai-welcome-card p {
-        font-size: 0.75rem;
-        color: var(--ai-text-dim);
+    .ai-card p {
+        font-size: 0.7rem;
+        color: var(--c-text-3);
         margin: 0;
         line-height: 1.4;
     }
 
-    /* ── Response formatting ── */
-    .ai-msg-bubble h3, .ai-msg-bubble h4 {
-        color: var(--ai-primary-light);
-        margin: 0.8rem 0 0.4rem;
-        font-size: 0.95rem;
+    /* ── Messages ── */
+    .msg {
+        animation: msgIn 0.25s ease;
     }
-    .ai-msg-bubble h3:first-child, .ai-msg-bubble h4:first-child { margin-top: 0; }
-    .ai-msg-bubble ul, .ai-msg-bubble ol {
-        padding-left: 1.2rem;
-        margin: 0.4rem 0;
+    @keyframes msgIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
     }
-    .ai-msg-bubble li { margin-bottom: 0.2rem; }
-    .ai-msg-bubble strong { color: var(--ai-primary-light); }
-    .ai-msg-bubble hr {
+
+    /* User message */
+    .msg-user {
+        display: flex;
+        justify-content: flex-end;
+        padding: 0.375rem 0;
+    }
+    .msg-user-bubble {
+        background: var(--c-surface-2);
+        border: 1px solid var(--c-border);
+        color: var(--c-text);
+        padding: 0.625rem 0.875rem;
+        border-radius: 16px 16px 4px 16px;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        max-width: 75%;
+        word-break: break-word;
+    }
+
+    /* AI message */
+    .msg-ai {
+        padding: 0.75rem 0;
+    }
+    .msg-ai-head {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .msg-ai-avatar {
+        width: 24px; height: 24px;
+        background: linear-gradient(135deg, var(--c-accent), #a67c52);
+        border-radius: 7px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+    .msg-ai-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--c-text-2);
+    }
+    .msg-ai-time {
+        font-size: 0.65rem;
+        color: var(--c-text-3);
+        margin-left: auto;
+    }
+    .msg-ai-body {
+        padding-left: 2rem;
+        font-size: 0.85rem;
+        line-height: 1.7;
+        color: var(--c-text);
+    }
+
+    /* AI response content formatting */
+    .msg-ai-body h3, .msg-ai-body h4 {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--c-accent-2);
+        margin: 1rem 0 0.375rem;
+    }
+    .msg-ai-body h3:first-child, .msg-ai-body h4:first-child { margin-top: 0; }
+    .msg-ai-body strong { color: var(--c-accent-2); font-weight: 600; }
+    .msg-ai-body ul, .msg-ai-body ol {
+        padding-left: 1.25rem;
+        margin: 0.375rem 0;
+    }
+    .msg-ai-body li {
+        margin-bottom: 0.25rem;
+        color: var(--c-text);
+    }
+    .msg-ai-body li::marker { color: var(--c-text-3); }
+    .msg-ai-body hr {
         border: none;
-        border-top: 1px solid var(--ai-border);
-        margin: 0.6rem 0;
+        border-top: 1px solid var(--c-border);
+        margin: 0.75rem 0;
+    }
+    .msg-ai-body pre, .msg-ai-body code {
+        font-family: 'JetBrains Mono', monospace;
+    }
+    .msg-ai-body pre {
+        background: var(--c-bg);
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        overflow-x: auto;
+        font-size: 0.78rem;
+        margin: 0.5rem 0;
+    }
+    .msg-ai-body code {
+        background: rgba(255,255,255,0.06);
+        padding: 0.15rem 0.35rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+    }
+    .msg-ai-body pre code {
+        background: none;
+        padding: 0;
+    }
+    .msg-ai-body table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.5rem 0;
+        font-size: 0.8rem;
+    }
+    .msg-ai-body th, .msg-ai-body td {
+        padding: 0.4rem 0.6rem;
+        border: 1px solid var(--c-border);
+        text-align: left;
+    }
+    .msg-ai-body th {
+        background: var(--c-surface-2);
+        font-weight: 600;
+        color: var(--c-accent-2);
+    }
+
+    /* Copy btn */
+    .msg-ai-actions {
+        padding-left: 2rem;
+        margin-top: 0.375rem;
+        display: flex;
+        gap: 0.25rem;
+        opacity: 0;
+        transition: opacity 0.15s;
+    }
+    .msg-ai:hover .msg-ai-actions { opacity: 1; }
+    .msg-action-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 6px;
+        border: none;
+        background: transparent;
+        color: var(--c-text-3);
+        font-size: 0.7rem;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .msg-action-btn:hover {
+        background: var(--c-surface-2);
+        color: var(--c-text-2);
+    }
+    .msg-action-btn .material-symbols-outlined { font-size: 14px; }
+
+    /* ── Thinking / Loading ── */
+    .ai-thinking {
+        display: none;
+        padding: 0.75rem 0;
+        animation: msgIn 0.25s ease;
+    }
+    .ai-thinking.active { display: block; }
+    .ai-thinking-head {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .ai-think-content {
+        padding-left: 2rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .ai-think-bar {
+        height: 3px;
+        background: var(--c-surface-3);
+        border-radius: 2px;
+        overflow: hidden;
+        width: 200px;
+    }
+    .ai-think-bar-fill {
+        height: 100%;
+        width: 40%;
+        background: linear-gradient(90deg, transparent, var(--c-accent), transparent);
+        border-radius: 2px;
+        animation: shimmer 1.5s ease-in-out infinite;
+    }
+    @keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(350%); }
+    }
+    .ai-think-text {
+        font-size: 0.78rem;
+        color: var(--c-text-3);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .ai-think-text .material-symbols-outlined {
+        font-size: 14px;
+        animation: spinSlow 2s linear infinite;
+        color: var(--c-accent);
+    }
+    @keyframes spinSlow { to { transform: rotate(360deg); } }
+
+    /* Streaming cursor */
+    .streaming-cursor {
+        display: inline-block;
+        width: 2px;
+        height: 1em;
+        background: var(--c-accent);
+        margin-left: 2px;
+        vertical-align: text-bottom;
+        animation: blink 0.8s step-end infinite;
+    }
+    @keyframes blink {
+        50% { opacity: 0; }
+    }
+
+    /* ── Quick Actions ── */
+    .ai-quick {
+        padding: 0 1.5rem;
+        display: flex;
+        gap: 0.375rem;
+        flex-wrap: wrap;
+        flex-shrink: 0;
+    }
+    .ai-qbtn {
+        padding: 0.3rem 0.65rem;
+        border-radius: 8px;
+        border: 1px solid var(--c-border);
+        background: transparent;
+        color: var(--c-text-3);
+        font-size: 0.72rem;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+    }
+    .ai-qbtn:hover {
+        border-color: var(--c-accent);
+        color: var(--c-accent);
+        background: var(--c-accent-glow);
+    }
+
+    /* ── Input ── */
+    .ai-input-area {
+        padding: 0.875rem 1.5rem 1.25rem;
+        flex-shrink: 0;
+    }
+    .ai-input-box {
+        display: flex;
+        align-items: flex-end;
+        gap: 0.5rem;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: 14px;
+        padding: 0.5rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .ai-input-box:focus-within {
+        border-color: var(--c-accent);
+        box-shadow: 0 0 0 3px var(--c-accent-glow);
+    }
+    .ai-input-box textarea {
+        flex: 1;
+        background: none;
+        border: none;
+        color: var(--c-text);
+        font-size: 0.85rem;
+        font-family: inherit;
+        resize: none;
+        min-height: 24px;
+        max-height: 140px;
+        outline: none;
+        padding: 0.3rem 0.5rem;
+        line-height: 1.5;
+    }
+    .ai-input-box textarea::placeholder { color: var(--c-text-3); }
+    .ai-submit {
+        width: 36px; height: 36px;
+        border-radius: 10px;
+        border: none;
+        background: var(--c-accent);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: all 0.15s;
+        flex-shrink: 0;
+        font-size: 16px;
+    }
+    .ai-submit:hover {
+        background: var(--c-accent-2);
+        transform: scale(1.04);
+    }
+    .ai-submit:active { transform: scale(0.96); }
+    .ai-submit:disabled {
+        opacity: 0.4;
+        cursor: default;
+        transform: none;
+    }
+    .ai-submit .material-symbols-outlined { font-size: 18px; }
+    .ai-submit .ai-spin {
+        width: 16px; height: 16px;
+        border: 2px solid rgba(255,255,255,0.25);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spinSlow 0.7s linear infinite;
+        display: none;
+    }
+    .ai-submit.busy .ai-spin { display: block; }
+    .ai-submit.busy .ai-arrow { display: none; }
+
+    .ai-input-hint {
+        text-align: center;
+        font-size: 0.65rem;
+        color: var(--c-text-3);
+        margin-top: 0.4rem;
+        opacity: 0.6;
     }
 
     /* ── Responsive ── */
-    @media (max-width: 768px) {
-        .ai-msg { max-width: 95%; }
-        .ai-welcome-grid { grid-template-columns: 1fr; }
-        .ai-header { padding: 1.2rem; }
+    @media (max-width: 640px) {
+        .ai-cards { grid-template-columns: 1fr 1fr; }
+        .ai-root { margin: 0; }
+        .msg-user-bubble { max-width: 90%; }
     }
 </style>
 
-<div class="ai-container">
-    <!-- Ambient Background -->
-    <div class="ai-ambient">
-        <div class="orb orb-1"></div>
-        <div class="orb orb-2"></div>
-        <div class="orb orb-3"></div>
-    </div>
-
+<div class="ai-root">
     <!-- Header -->
-    <div class="ai-header">
-        <div class="ai-header-content">
-            <div class="ai-logo">
-                <span class="material-symbols-outlined" style="font-size:24px;">neurology</span>
-            </div>
-            <div>
-                <h1>AI Stock Assistant</h1>
-                <p>Powered by Gemini 2.5 Flash &mdash; Ask anything about your inventory</p>
-            </div>
-            <div class="ai-status">
-                <span class="ai-status-dot"></span>
-                Online
-            </div>
+    <div class="ai-head">
+        <div class="ai-head-logo">
+            <span class="material-symbols-outlined">auto_awesome</span>
+        </div>
+        <div class="ai-head-info">
+            <h1>AI Assistant</h1>
+            <span>Sales, inventory, and business analytics</span>
+        </div>
+        <div class="ai-head-actions">
+            <button class="ai-head-btn" onclick="clearChat()" title="New chat">
+                <span class="material-symbols-outlined" style="font-size:16px;">add</span>
+            </button>
         </div>
     </div>
 
-    <!-- Chat Messages -->
-    <div class="ai-chat" id="aiChat">
-        <!-- Welcome screen -->
-        <div class="ai-welcome" id="aiWelcome">
-            <div class="ai-welcome-icon">
-                <span class="material-symbols-outlined" style="font-size:36px;">auto_awesome</span>
+    <!-- Messages -->
+    <div class="ai-messages" id="msgs">
+        <div class="ai-welcome" id="welcome">
+            <div class="ai-welcome-mark">
+                <span class="material-symbols-outlined">auto_awesome</span>
             </div>
-            <h2>How can I help with your stock?</h2>
-            <p>Ask me about inventory levels, low stock alerts, expiring batches, forecasting, recipes, and more.</p>
-            <div class="ai-welcome-grid">
-                <div class="ai-welcome-card" onclick="askQuestion('How are today\'s sales? Show revenue, order count, and top products')">
-                    <span class="ai-welcome-card-icon material-symbols-outlined" style="color:var(--ai-emerald);">point_of_sale</span>
+            <h2>What would you like to know?</h2>
+            <p>Ask about sales, inventory, analytics, or business recommendations</p>
+            <div class="ai-cards">
+                <div class="ai-card" style="--card-accent:var(--c-green)" onclick="ask('Show me today\'s sales summary with revenue and top products')">
+                    <span class="ai-card-icon material-symbols-outlined" style="color:var(--c-green)">point_of_sale</span>
                     <h4>Today's Sales</h4>
-                    <p>Revenue, orders, top products</p>
+                    <p>Revenue, orders, top sellers</p>
                 </div>
-                <div class="ai-welcome-card" onclick="askQuestion('Who is the best cashier this month? Show all cashier performance')">
-                    <span class="ai-welcome-card-icon material-symbols-outlined" style="color:var(--ai-violet);">person_pin</span>
-                    <h4>Best Cashier</h4>
-                    <p>Cashier performance rankings</p>
+                <div class="ai-card" style="--card-accent:var(--c-orange)" onclick="ask('Run ABC-XYZ analysis on my inventory and give recommendations')">
+                    <span class="ai-card-icon material-symbols-outlined" style="color:var(--c-orange)">analytics</span>
+                    <h4>ABC-XYZ Analysis</h4>
+                    <p>Inventory classification matrix</p>
                 </div>
-                <div class="ai-welcome-card" onclick="askQuestion('Show me all low stock items')">
-                    <span class="ai-welcome-card-icon material-symbols-outlined" style="color:var(--ai-amber);">warning</span>
-                    <h4>Low Stock Alerts</h4>
-                    <p>Items below reorder point</p>
+                <div class="ai-card" style="--card-accent:var(--c-purple)" onclick="ask('Run menu engineering analysis - show stars, dogs, puzzles, plow horses')">
+                    <span class="ai-card-icon material-symbols-outlined" style="color:var(--c-purple)">restaurant_menu</span>
+                    <h4>Menu Engineering</h4>
+                    <p>Stars, Dogs, Puzzles, Plows</p>
                 </div>
-                <div class="ai-welcome-card" onclick="askQuestion('Give me a full business and stock overview')">
-                    <span class="ai-welcome-card-icon material-symbols-outlined" style="color:var(--ai-cyan);">analytics</span>
-                    <h4>Full Overview</h4>
-                    <p>Sales + inventory summary</p>
+                <div class="ai-card" style="--card-accent:var(--c-blue)" onclick="ask('What are the most profitable products? Show margins and recommendations')">
+                    <span class="ai-card-icon material-symbols-outlined" style="color:var(--c-blue)">trending_up</span>
+                    <h4>Profitability</h4>
+                    <p>Margins and profit analysis</p>
                 </div>
-                <div class="ai-welcome-card" onclick="askQuestion('What are the top 10 best selling products this month?')">
-                    <span class="ai-welcome-card-icon material-symbols-outlined" style="color:var(--ai-rose);">local_fire_department</span>
-                    <h4>Best Sellers</h4>
-                    <p>Top products by revenue</p>
+                <div class="ai-card" style="--card-accent:var(--c-red)" onclick="ask('Show low stock alerts and forecast stockouts for the next 30 days')">
+                    <span class="ai-card-icon material-symbols-outlined" style="color:var(--c-red)">warning</span>
+                    <h4>Stock Alerts</h4>
+                    <p>Low stock and forecasts</p>
                 </div>
-                <div class="ai-welcome-card" onclick="askQuestion('Forecast stockouts for the next 30 days')">
-                    <span class="ai-welcome-card-icon material-symbols-outlined" style="color:var(--ai-primary-light);">trending_up</span>
-                    <h4>Stockout Forecast</h4>
-                    <p>Predict when items run out</p>
+                <div class="ai-card" style="--card-accent:var(--c-accent)" onclick="ask('Give me full business recommendations to improve revenue and reduce costs')">
+                    <span class="ai-card-icon material-symbols-outlined" style="color:var(--c-accent)">lightbulb</span>
+                    <h4>Business Advice</h4>
+                    <p>Recommendations to improve</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Typing indicator -->
-    <div class="ai-typing" id="aiTyping">
-        <div class="ai-msg-avatar" style="background: linear-gradient(135deg, var(--ai-primary), var(--ai-violet)); color: white;">
-            <span class="material-symbols-outlined" style="font-size:16px;">neurology</span>
+    <!-- Thinking indicator -->
+    <div class="ai-thinking" id="thinking">
+        <div class="ai-thinking-head">
+            <div class="msg-ai-avatar">
+                <span class="material-symbols-outlined" style="font-size:13px;">auto_awesome</span>
+            </div>
+            <span class="msg-ai-label">Assistant</span>
         </div>
-        <div class="ai-typing-dots">
-            <span></span><span></span><span></span>
+        <div class="ai-think-content">
+            <div class="ai-think-text">
+                <span class="material-symbols-outlined">progress_activity</span>
+                <span id="thinkLabel">Analyzing your data...</span>
+            </div>
+            <div class="ai-think-bar"><div class="ai-think-bar-fill"></div></div>
         </div>
     </div>
 
     <!-- Quick Actions -->
-    <div class="ai-quick-actions" id="aiQuickActions">
-        <button class="ai-quick-btn" onclick="askQuestion('Today\'s sales summary')">Today's Sales</button>
-        <button class="ai-quick-btn" onclick="askQuestion('Best cashier this month')">Best Cashier</button>
-        <button class="ai-quick-btn" onclick="askQuestion('Top selling products')">Best Sellers</button>
-        <button class="ai-quick-btn" onclick="askQuestion('Low stock items')">Low Stock</button>
-        <button class="ai-quick-btn" onclick="askQuestion('Expiring batches')">Expiring</button>
-        <button class="ai-quick-btn" onclick="askQuestion('How many users do we have?')">Users</button>
-        <button class="ai-quick-btn" onclick="askQuestion('Stockout forecast')">Forecast</button>
-        <button class="ai-quick-btn" onclick="askQuestion('Weekly sales trend')">Weekly Trend</button>
-        <button class="ai-quick-btn" onclick="askQuestion('Recipe availability')">Recipes</button>
-        <button class="ai-quick-btn" onclick="askQuestion('Revenue by category')">Categories</button>
+    <div class="ai-quick" id="quickBar">
+        <button class="ai-qbtn" onclick="ask('Today\'s sales')">Sales today</button>
+        <button class="ai-qbtn" onclick="ask('Best cashier')">Best cashier</button>
+        <button class="ai-qbtn" onclick="ask('Low stock items')">Low stock</button>
+        <button class="ai-qbtn" onclick="ask('ABC analysis')">ABC analysis</button>
+        <button class="ai-qbtn" onclick="ask('Menu engineering')">Menu engineering</button>
+        <button class="ai-qbtn" onclick="ask('Stockout forecast')">Forecast</button>
+        <button class="ai-qbtn" onclick="ask('Inventory health report')">Inventory health</button>
+        <button class="ai-qbtn" onclick="ask('Business recommendations')">Recommendations</button>
     </div>
 
-    <!-- Input Area -->
+    <!-- Input -->
     <div class="ai-input-area">
-        <div class="ai-input-wrap">
-            <textarea class="ai-input" id="aiInput" placeholder="Ask about stock levels, forecasts, recipes..."
-                      rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-            <button class="ai-send-btn" id="aiSendBtn" onclick="sendMessage()">
-                <span class="send-icon material-symbols-outlined" style="font-size:20px;">send</span>
-                <span class="spinner"></span>
+        <div class="ai-input-box">
+            <textarea id="input" rows="1" placeholder="Ask anything about your business..."
+                      onkeydown="onKey(event)" oninput="resize(this)"></textarea>
+            <button class="ai-submit" id="sendBtn" onclick="send()">
+                <span class="ai-arrow material-symbols-outlined">arrow_upward</span>
+                <span class="ai-spin"></span>
             </button>
         </div>
+        <div class="ai-input-hint">Enter to send, Shift+Enter for new line</div>
     </div>
 </div>
 
 <script>
-const chatEl = document.getElementById('aiChat');
-const inputEl = document.getElementById('aiInput');
-const sendBtn = document.getElementById('aiSendBtn');
-const typingEl = document.getElementById('aiTyping');
-const welcomeEl = document.getElementById('aiWelcome');
-let isLoading = false;
+const msgsEl = document.getElementById('msgs');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('sendBtn');
+const thinkEl = document.getElementById('thinking');
+const welcomeEl = document.getElementById('welcome');
+const thinkLabel = document.getElementById('thinkLabel');
+let busy = false;
+let thinkInterval = null;
 
-function getCSRFToken() {
-    const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
-    return cookie ? cookie.split('=')[1] : '';
+const thinkPhrases = [
+    'Analyzing your data...',
+    'Querying sales records...',
+    'Crunching inventory numbers...',
+    'Running analytics...',
+    'Computing insights...',
+    'Preparing response...',
+];
+
+function csrf() {
+    const c = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+    return c ? c.split('=')[1] : '';
 }
 
-function getTime() {
+function now() {
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function autoResize(el) {
+function resize(el) {
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    el.style.height = Math.min(el.scrollHeight, 140) + 'px';
 }
 
-function handleKey(e) {
+function onKey(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        sendMessage();
+        send();
     }
 }
 
-function formatResponse(text) {
+function fmt(text) {
+    // Code blocks
+    text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    // Inline code
+    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Tables: detect | delimited lines
+    text = text.replace(/((?:^\|.+\|$\n?)+)/gm, function(table) {
+        const rows = table.trim().split('\n').filter(r => r.trim());
+        if (rows.length < 2) return table;
+        let html = '<table>';
+        rows.forEach((row, i) => {
+            const cells = row.split('|').filter(c => c.trim() !== '');
+            if (i === 1 && cells.every(c => /^[\s\-:]+$/.test(c))) return; // separator row
+            const tag = i === 0 ? 'th' : 'td';
+            html += '<tr>' + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('') + '</tr>';
+        });
+        html += '</table>';
+        return html;
+    });
     // Bold
     text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    // Headers (lines ending with nothing special but starting with caps and containing ':')
-    text = text.replace(/^([A-ZА-ЯЁ][A-ZА-ЯЁa-zа-яё0-9' ]+)$/gm, '<h4>$1</h4>');
-    // Dashes to list items
-    text = text.replace(/^- (.+)$/gm, '<li>$1</li>');
+    // Headers
+    text = text.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    text = text.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    text = text.replace(/^# (.+)$/gm, '<h3>$1</h3>');
+    // Numbered list
+    text = text.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    // Dash list
+    text = text.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
     // Wrap consecutive li in ul
     text = text.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
     // Horizontal rules
     text = text.replace(/^---+$/gm, '<hr>');
-    // Line breaks
+    // Line breaks (but not inside tags)
     text = text.replace(/\n/g, '<br>');
-    // Clean up
-    text = text.replace(/<br><h4>/g, '<h4>');
-    text = text.replace(/<\/h4><br>/g, '</h4>');
+    // Cleanup
+    text = text.replace(/<br><h([34])>/g, '<h$1>');
+    text = text.replace(/<\/h([34])><br>/g, '</h$1>');
     text = text.replace(/<br><ul>/g, '<ul>');
     text = text.replace(/<\/ul><br>/g, '</ul>');
     text = text.replace(/<br><hr>/g, '<hr>');
     text = text.replace(/<hr><br>/g, '<hr>');
+    text = text.replace(/<br><table>/g, '<table>');
+    text = text.replace(/<\/table><br>/g, '</table>');
+    text = text.replace(/<br><pre>/g, '<pre>');
+    text = text.replace(/<\/pre><br>/g, '</pre>');
     return text;
 }
 
-function addMessage(content, isUser) {
+function addUser(text) {
     if (welcomeEl) welcomeEl.style.display = 'none';
-
-    const msg = document.createElement('div');
-    msg.className = `ai-msg ${isUser ? 'ai-msg-user' : 'ai-msg-ai'}`;
-
-    const avatarIcon = isUser ? 'person' : 'neurology';
-    const formattedContent = isUser ? content : formatResponse(content);
-
-    msg.innerHTML = `
-        <div class="ai-msg-avatar">
-            <span class="material-symbols-outlined" style="font-size:16px;">${avatarIcon}</span>
-        </div>
-        <div>
-            <div class="ai-msg-bubble">${formattedContent}</div>
-            <div class="ai-msg-time">${getTime()}</div>
-        </div>
-    `;
-    chatEl.appendChild(msg);
-    chatEl.scrollTop = chatEl.scrollHeight;
+    const d = document.createElement('div');
+    d.className = 'msg msg-user';
+    d.innerHTML = `<div class="msg-user-bubble">${text.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`;
+    msgsEl.appendChild(d);
+    scrollBottom();
 }
 
-function setLoading(state) {
-    isLoading = state;
-    sendBtn.disabled = state;
-    sendBtn.classList.toggle('loading', state);
-    typingEl.classList.toggle('active', state);
-    if (state) {
-        chatEl.appendChild(typingEl);
-        chatEl.scrollTop = chatEl.scrollHeight;
+function addAI(text, elapsed) {
+    const d = document.createElement('div');
+    d.className = 'msg msg-ai';
+    const timeStr = elapsed ? `${now()} · ${(elapsed/1000).toFixed(1)}s` : now();
+    d.innerHTML = `
+        <div class="msg-ai-head">
+            <div class="msg-ai-avatar">
+                <span class="material-symbols-outlined" style="font-size:13px;">auto_awesome</span>
+            </div>
+            <span class="msg-ai-label">Assistant</span>
+            <span class="msg-ai-time">${timeStr}</span>
+        </div>
+        <div class="msg-ai-body"></div>
+        <div class="msg-ai-actions">
+            <button class="msg-action-btn" onclick="copyMsg(this)">
+                <span class="material-symbols-outlined">content_copy</span> Copy
+            </button>
+        </div>
+    `;
+    msgsEl.appendChild(d);
+    const bodyEl = d.querySelector('.msg-ai-body');
+    streamText(bodyEl, text);
+}
+
+function streamText(el, text) {
+    const formatted = fmt(text);
+    // Split into small chunks for streaming effect
+    const tmp = document.createElement('div');
+    tmp.innerHTML = formatted;
+    const fullHTML = tmp.innerHTML;
+
+    let idx = 0;
+    const cursor = document.createElement('span');
+    cursor.className = 'streaming-cursor';
+    el.appendChild(cursor);
+
+    const chunkSize = Math.max(3, Math.floor(fullHTML.length / 80));
+    const interval = setInterval(() => {
+        // Find next safe split point (don't break HTML tags)
+        let end = Math.min(idx + chunkSize, fullHTML.length);
+        // If we're inside a tag, extend to close it
+        let openBrackets = 0;
+        for (let i = idx; i < end; i++) {
+            if (fullHTML[i] === '<') openBrackets++;
+            if (fullHTML[i] === '>') openBrackets--;
+        }
+        while (openBrackets > 0 && end < fullHTML.length) {
+            if (fullHTML[end] === '>') openBrackets--;
+            if (fullHTML[end] === '<') openBrackets++;
+            end++;
+        }
+
+        el.innerHTML = fullHTML.substring(0, end);
+        el.appendChild(cursor);
+        idx = end;
+        scrollBottom();
+
+        if (idx >= fullHTML.length) {
+            clearInterval(interval);
+            cursor.remove();
+        }
+    }, 18);
+}
+
+function copyMsg(btn) {
+    const body = btn.closest('.msg-ai').querySelector('.msg-ai-body');
+    const text = body.innerText || body.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<span class="material-symbols-outlined">check</span> Copied';
+        setTimeout(() => btn.innerHTML = orig, 1500);
+    });
+}
+
+function setThinking(on) {
+    busy = on;
+    sendBtn.disabled = on;
+    sendBtn.classList.toggle('busy', on);
+    thinkEl.classList.toggle('active', on);
+
+    if (on) {
+        msgsEl.appendChild(thinkEl);
+        scrollBottom();
+        let phraseIdx = 0;
+        thinkLabel.textContent = thinkPhrases[0];
+        thinkInterval = setInterval(() => {
+            phraseIdx = (phraseIdx + 1) % thinkPhrases.length;
+            thinkLabel.textContent = thinkPhrases[phraseIdx];
+        }, 2500);
+    } else {
+        if (thinkInterval) {
+            clearInterval(thinkInterval);
+            thinkInterval = null;
+        }
     }
 }
 
-async function sendMessage() {
-    const query = inputEl.value.trim();
-    if (!query || isLoading) return;
+async function send() {
+    const q = inputEl.value.trim();
+    if (!q || busy) return;
 
     inputEl.value = '';
     inputEl.style.height = 'auto';
-    addMessage(query, true);
-    setLoading(true);
+    addUser(q);
+    setThinking(true);
+
+    const t0 = Date.now();
 
     try {
-        const res = await fetch('/ai/query/', {
+        const r = await fetch('/ai/query/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': getCSRFToken(),
+                'X-CSRFToken': csrf(),
             },
-            body: JSON.stringify({ query: query }),
+            body: JSON.stringify({ query: q }),
         });
 
-        const data = await res.json();
-        setLoading(false);
+        const data = await r.json();
+        const elapsed = Date.now() - t0;
+        setThinking(false);
 
-        if (data.data && data.data.response) {
-            addMessage(data.data.response, false);
-        } else if (data.response) {
-            addMessage(data.response, false);
-        } else if (data.error) {
-            addMessage('Error: ' + (data.error || 'Something went wrong'), false);
-        } else {
-            addMessage('Received an unexpected response format.', false);
-        }
-    } catch (err) {
-        setLoading(false);
-        addMessage('Connection error. Please check your network and try again.', false);
+        const response = data?.data?.response || data?.response || data?.error || 'No response received.';
+        addAI(response, elapsed);
+    } catch (e) {
+        setThinking(false);
+        addAI('Connection error. Please check your network and try again.', Date.now() - t0);
     }
 }
 
-function askQuestion(q) {
+function ask(q) {
     inputEl.value = q;
-    sendMessage();
+    send();
 }
 
-// Focus input on load
+function clearChat() {
+    msgsEl.querySelectorAll('.msg').forEach(m => m.remove());
+    if (welcomeEl) {
+        welcomeEl.style.display = '';
+        msgsEl.prepend(welcomeEl);
+    }
+}
+
+function scrollBottom() {
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+
 inputEl.focus();
 </script>
 {% endblock %}
