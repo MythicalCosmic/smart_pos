@@ -161,3 +161,5 @@ ORDER_MESSAGES_FILE = "data/order_messages.json"
 PENDING_ORDERS_FILE = "data/pending_order_notifications.json"
 
 RETRY_INTERVAL_SECONDS = 180  
+
+BOT_TOKEN = "8170384586:AAGX4nKThV-X9xjGTZqgU5t4BrqkrFzPPCc"

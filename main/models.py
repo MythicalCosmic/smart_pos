@@ -85,10 +85,24 @@ class SyncMixin(models.Model):
         
         try:
             instance = cls.objects.get(uuid=uuid_val)
+            from decimal import Decimal, InvalidOperation
+
+            def safe_decimal(value):
+                if value in ["", None]:
+                    return Decimal("0")
+                try:
+                    return Decimal(str(value))
+                except InvalidOperation:
+                    return Decimal("0")
             
             if sync_version >= instance.sync_version:
                 for key, value in data.items():
                     if hasattr(instance, key):
+                        field = instance._meta.get_field(key)
+
+                        if isinstance(field, models.DecimalField):
+                            value = safe_decimal(value)
+
                         setattr(instance, key, value)
                 instance.sync_version = sync_version
                 instance.is_deleted = is_deleted

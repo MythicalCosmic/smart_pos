@@ -137,11 +137,12 @@ class OrderService:
         
         if cashier_id:
             queryset = queryset.filter(cashier_id=cashier_id)
-        
+     
         queryset = queryset.order_by(order_by)
+        from decimal import Decimal, InvalidOperation
+
         paginator = Paginator(queryset, per_page)
         page_obj = paginator.get_page(page)
-        
         orders = []
         for order in page_obj.object_list:
             orders.append({
